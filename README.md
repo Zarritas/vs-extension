@@ -1,71 +1,156 @@
-# gextia-dev-helper README
+# Odoo Development Helper
 
-This is the README for your extension "gextia-dev-helper". After writing up a brief description, we recommend including the following sections.
+Una extensión de VS Code que mejora significativamente la experiencia de desarrollo con Odoo, proporcionando autocompletado inteligente, gestión de proyectos y análisis de herencia de modelos.
 
-## Features
+## ✨ Características
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+### 🎯 Gestión de Proyectos
+- **Perfiles configurables**: Crea múltiples perfiles de proyecto para diferentes instalaciones de Odoo
+- **Detección automática**: Encuentra automáticamente carpetas de addons en tu workspace
+- **Múltiples rutas**: Soporte para Odoo Core, Enterprise, Community y addons personalizados
+- **Cambio rápido**: Alterna entre proyectos con un solo comando
 
-For example if there is an image subfolder under your extension project workspace:
+### 🧠 Autocompletado Inteligente
+- **Herencia completa**: Detecta automáticamente modelos que heredan usando `_inherit`
+- **Contexto consciente**: Sugerencias basadas en el modelo actual y sus relaciones
+- **Campos y métodos**: Autocompletado de todos los campos y métodos disponibles
+- **Navegación rápida**: Salta a definiciones con Ctrl+Click
 
-\!\[feature X\]\(images/feature-x.png\)
+### 📊 Análisis de Modelos
+- **Caché inteligente**: Sistema de caché que se actualiza automáticamente al guardar archivos
+- **Árbol de herencia**: Visualiza cómo se relacionan tus modelos
+- **Estadísticas**: Información detallada sobre modelos cargados y archivos rastreados
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+## 🚀 Instalación
 
-## Requirements
+1. Abre VS Code
+2. Ve a Extensions (Ctrl+Shift+X)
+3. Busca "Odoo Development Helper"
+4. Haz clic en Install
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
+## ⚙️ Configuración Inicial
 
-## Extension Settings
+### Crear tu primer perfil
 
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
+1. Abre la paleta de comandos (Ctrl+Shift+P)
+2. Ejecuta `Odoo: Create Project Profile`
+3. Sigue el asistente de configuración:
+   - Nombra tu perfil
+   - Selecciona la versión de Odoo
+   - Configura las rutas de tus addons
 
-For example:
+### Estructura típica de rutas
 
-This extension contributes the following settings:
+```
+Proyecto Odoo típico:
+├── /opt/odoo/16.0/                    ← Odoo Core
+│   ├── odoo/                          ← Código core
+│   └── addons/                        ← Addons oficiales
+├── /opt/odoo/enterprise/              ← Odoo Enterprise (opcional)
+└── /home/user/custom_addons/          ← Tus addons personalizados
+    ├── mi_modulo/
+    ├── otro_modulo/
+    └── ...
+```
 
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+## 📋 Comandos Disponibles
 
-## Known Issues
+| Comando | Descripción |
+|---------|-------------|
+| `Odoo: Create Project Profile` | Crear un nuevo perfil de proyecto |
+| `Odoo: Switch Project Profile` | Cambiar entre perfiles existentes |
+| `Odoo: Refresh Models Cache` | Actualizar manualmente el caché de modelos |
+| `Odoo: Show Cache Statistics` | Ver estadísticas del caché actual |
+| `Odoo: Show Inheritance Tree` | Mostrar árbol de herencia de modelos |
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+## 🎯 Casos de Uso
 
-## Release Notes
+### Autocompletado de campos relacionales
 
-Users appreciate release notes as you update your extension.
+```python
+class SaleOrder(models.Model):
+    _inherit = 'sale.order'
+    
+    def custom_method(self):
+        # Escribe "self.partner_id." y obtén sugerencias de todos los campos de res.partner
+        self.partner_id.name
+        self.partner_id.email
+        self.partner_id.phone  # ← Sugerencias automáticas
+```
 
-### 1.0.0
+### Navegación entre herencias
 
-Initial release of ...
+```python
+# Modelo base en addons/base/models/res_partner.py
+class ResPartner(models.Model):
+    _name = 'res.partner'
+    name = fields.Char("Name")
 
-### 1.0.1
+# Tu extensión en custom_addons/mi_modulo/models/partner.py  
+class ResPartnerCustom(models.Model):
+    _inherit = 'res.partner'
+    custom_field = fields.Char("Custom Field")  # ← Ctrl+Click para navegar
+```
 
-Fixed issue #.
+## 🔧 Configuración Avanzada
 
-### 1.1.0
+### Configuraciones disponibles
 
-Added features X, Y, and Z.
+- `odoo-dev-helper.enableDebugMode`: Activar logs detallados
+- `odoo-dev-helper.autoRefreshOnSave`: Actualizar caché al guardar archivos Python
+- `odoo-dev-helper.odooVersion`: Versión de Odoo del proyecto actual
+
+### Exclusiones de archivos
+
+La extensión excluye automáticamente:
+- `**/migrations/**` - Archivos de migración
+- `**/tests/**` - Archivos de pruebas
+- `**/__pycache__/**` - Cache de Python
+- `**/*.pyc` - Archivos compilados
+
+## 🐛 Solución de Problemas
+
+### El autocompletado no funciona
+1. Verifica que tengas un perfil activo: `Odoo: Show Cache Statistics`
+2. Refresca el caché: `Odoo: Refresh Models Cache`
+3. Revisa que las rutas estén configuradas correctamente
+
+### Rendimiento lento
+1. Verifica la configuración de exclusiones
+2. Considera desactivar `autoRefreshOnSave` para proyectos muy grandes
+3. Usa `enableDebugMode: false` en producción
+
+### No encuentra modelos
+1. Asegúrate de que las rutas incluyan los archivos `__manifest__.py`
+2. Verifica permisos de lectura en las carpetas configuradas
+3. Revisa los logs en el Output Channel "Odoo Dev Helper"
+
+## 🤝 Contribuir
+
+¿Encontraste un bug o tienes una idea? ¡Contribuye!
+
+1. Fork el repositorio
+2. Crea una rama para tu feature: `git checkout -b feature/nueva-funcionalidad`
+3. Commit tus cambios: `git commit -am 'Agregar nueva funcionalidad'`
+4. Push a la rama: `git push origin feature/nueva-funcionalidad`
+5. Abre un Pull Request
+
+## 📄 Licencia
+
+MIT License - ver [LICENSE](LICENSE) para más detalles.
+
+## 🙏 Agradecimientos
+
+- Comunidad de Odoo por la inspiración
+- Equipo de VS Code por las excelentes APIs
+- Todos los contribuidores y usuarios que hacen posible este proyecto
 
 ---
 
-## Following extension guidelines
+**¿Te gusta la extensión?** ⭐ ¡Dale una estrella en GitHub y compártela con otros desarrolladores de Odoo!
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+## 📞 Soporte
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+- 🐛 [Reportar bugs](https://github.com/tu-usuario/odoo-dev-helper/issues)
+- 💡 [Solicitar features](https://github.com/tu-usuario/odoo-dev-helper/issues)
+- 📧 Email: tu-email@ejemplo.com
