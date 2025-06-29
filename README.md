@@ -1,13 +1,13 @@
-# Odoo Development Helper
+# Gextia Development Helper
 
-Una extensión de VS Code que mejora significativamente la experiencia de desarrollo con Odoo, proporcionando autocompletado inteligente, gestión de proyectos y análisis de herencia de modelos.
+Una extensión de VS Code que mejora significativamente la experiencia de desarrollo con Gextia, proporcionando autocompletado inteligente, gestión de proyectos y análisis de herencia de modelos.
 
 ## ✨ Características
 
 ### 🎯 Gestión de Proyectos
-- **Perfiles configurables**: Crea múltiples perfiles de proyecto para diferentes instalaciones de Odoo
+- **Perfiles configurables**: Crea múltiples perfiles de proyecto para diferentes instalaciones de Gextia
 - **Detección automática**: Encuentra automáticamente carpetas de addons en tu workspace
-- **Múltiples rutas**: Soporte para Odoo Core, Enterprise, Community y addons personalizados
+- **Múltiples rutas**: Soporte para Gextia Core, Enterprise, Community y addons personalizados
 - **Cambio rápido**: Alterna entre proyectos con un solo comando
 
 ### 🧠 Autocompletado Inteligente
@@ -25,7 +25,7 @@ Una extensión de VS Code que mejora significativamente la experiencia de desarr
 
 1. Abre VS Code
 2. Ve a Extensions (Ctrl+Shift+X)
-3. Busca "Odoo Development Helper"
+3. Busca "Gextia Development Helper"
 4. Haz clic en Install
 
 ## ⚙️ Configuración Inicial
@@ -33,20 +33,19 @@ Una extensión de VS Code que mejora significativamente la experiencia de desarr
 ### Crear tu primer perfil
 
 1. Abre la paleta de comandos (Ctrl+Shift+P)
-2. Ejecuta `Odoo: Create Project Profile`
+2. Ejecuta `Gextia: Create Project Profile`
 3. Sigue el asistente de configuración:
    - Nombra tu perfil
-   - Selecciona la versión de Odoo
+   - Selecciona la versión de Gextia
    - Configura las rutas de tus addons
 
 ### Estructura típica de rutas
 
 ```
-Proyecto Odoo típico:
-├── /opt/odoo/16.0/                    ← Odoo Core
+Proyecto Gextia típico:
+├── /opt/gextia-server/odoo/           ← Gextia Core
 │   ├── odoo/                          ← Código core
 │   └── addons/                        ← Addons oficiales
-├── /opt/odoo/enterprise/              ← Odoo Enterprise (opcional)
 └── /home/user/custom_addons/          ← Tus addons personalizados
     ├── mi_modulo/
     ├── otro_modulo/
@@ -57,11 +56,11 @@ Proyecto Odoo típico:
 
 | Comando | Descripción |
 |---------|-------------|
-| `Odoo: Create Project Profile` | Crear un nuevo perfil de proyecto |
-| `Odoo: Switch Project Profile` | Cambiar entre perfiles existentes |
-| `Odoo: Refresh Models Cache` | Actualizar manualmente el caché de modelos |
-| `Odoo: Show Cache Statistics` | Ver estadísticas del caché actual |
-| `Odoo: Show Inheritance Tree` | Mostrar árbol de herencia de modelos |
+| `Gextia: Create Project Profile` | Crear un nuevo perfil de proyecto |
+| `Gextia: Switch Project Profile` | Cambiar entre perfiles existentes |
+| `Gextia: Refresh Models Cache` | Actualizar manualmente el caché de modelos |
+| `Gextia: Show Cache Statistics` | Ver estadísticas del caché actual |
+| `Gextia: Show Inheritance Tree` | Mostrar árbol de herencia de modelos |
 
 ## 🎯 Casos de Uso
 
@@ -96,9 +95,9 @@ class ResPartnerCustom(models.Model):
 
 ### Configuraciones disponibles
 
-- `odoo-dev-helper.enableDebugMode`: Activar logs detallados
-- `odoo-dev-helper.autoRefreshOnSave`: Actualizar caché al guardar archivos Python
-- `odoo-dev-helper.odooVersion`: Versión de Odoo del proyecto actual
+- `gextia-dev-helper.enableDebugMode`: Activar logs detallados
+- `gextia-dev-helper.autoRefreshOnSave`: Actualizar caché al guardar archivos Python
+- `gextia-dev-helper.gextiaVersion`: Versión de Gextia del proyecto actual
 
 ### Exclusiones de archivos
 
@@ -111,8 +110,8 @@ La extensión excluye automáticamente:
 ## 🐛 Solución de Problemas
 
 ### El autocompletado no funciona
-1. Verifica que tengas un perfil activo: `Odoo: Show Cache Statistics`
-2. Refresca el caché: `Odoo: Refresh Models Cache`
+1. Verifica que tengas un perfil activo: `Gextia: Show Cache Statistics`
+2. Refresca el caché: `Gextia: Refresh Models Cache`
 3. Revisa que las rutas estén configuradas correctamente
 
 ### Rendimiento lento
@@ -123,7 +122,7 @@ La extensión excluye automáticamente:
 ### No encuentra modelos
 1. Asegúrate de que las rutas incluyan los archivos `__manifest__.py`
 2. Verifica permisos de lectura en las carpetas configuradas
-3. Revisa los logs en el Output Channel "Odoo Dev Helper"
+3. Revisa los logs en el Output Channel "Gextia Dev Helper"
 
 ## 🤝 Contribuir
 
@@ -141,16 +140,16 @@ MIT License - ver [LICENSE](LICENSE) para más detalles.
 
 ## 🙏 Agradecimientos
 
-- Comunidad de Odoo por la inspiración
+- Comunidad de Gextia por la inspiración
 - Equipo de VS Code por las excelentes APIs
 - Todos los contribuidores y usuarios que hacen posible este proyecto
 
 ---
 
-**¿Te gusta la extensión?** ⭐ ¡Dale una estrella en GitHub y compártela con otros desarrolladores de Odoo!
+**¿Te gusta la extensión?** ⭐ ¡Dale una estrella en GitHub y compártela con otros desarrolladores de Gextia!
 
 ## 📞 Soporte
 
-- 🐛 [Reportar bugs](https://github.com/tu-usuario/odoo-dev-helper/issues)
-- 💡 [Solicitar features](https://github.com/tu-usuario/odoo-dev-helper/issues)
+- 🐛 [Reportar bugs](https://github.com/tu-usuario/gextia-dev-helper/issues)
+- 💡 [Solicitar features](https://github.com/tu-usuario/gextia-dev-helper/issues)
 - 📧 Email: tu-email@ejemplo.com
