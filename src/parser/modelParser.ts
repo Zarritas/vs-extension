@@ -136,9 +136,9 @@ export class ModelParser {
     }
 
     /**
-     * Parsea el archivo manifest de un módulo
+     * Parsea el manifest de un módulo
      */
-    private async parseManifest(modulePath: string): Promise<ModuleManifest | null> {
+    public async parseManifest(modulePath: string): Promise<ModuleManifest | null> {
         const manifestFiles = ['__manifest__.py', '__openerp__.py'];
         
         for (const manifestFile of manifestFiles) {
@@ -266,7 +266,37 @@ export class ModelParser {
                 
                 if (classMatch) {
                     const className = classMatch[1];
-                    const model = await this.parseModelClass(lines, i, className, filePath, moduleName, manifest);
+                    const model = await this.parseModelClass(lines, i, className, filePath, moduleName, manifest, 'model');
+                    
+                    if (model) {
+                        models.push(model);
+                    }
+                }
+            }
+            
+            // Buscar definiciones de clases que hereden de models.AbstractModel
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const abstractMatch = line.match(/^class\s+(\w+)\s*\(\s*models\.AbstractModel\s*\)/);
+                
+                if (abstractMatch) {
+                    const className = abstractMatch[1];
+                    const model = await this.parseModelClass(lines, i, className, filePath, moduleName, manifest, 'abstract_model');
+                    
+                    if (model) {
+                        models.push(model);
+                    }
+                }
+            }
+            
+            // Buscar definiciones de componentes (Component)
+            for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const componentMatch = line.match(/^class\s+(\w+)\s*\(\s*Component\s*\)/);
+                
+                if (componentMatch) {
+                    const className = componentMatch[1];
+                    const model = await this.parseComponentClass(lines, i, className, filePath, moduleName, manifest);
                     
                     if (model) {
                         models.push(model);
@@ -290,7 +320,8 @@ export class ModelParser {
         className: string, 
         filePath: string, 
         moduleName: string,
-        manifest: ModuleManifest | null
+        manifest: ModuleManifest | null,
+        modelType: 'model' | 'abstract_model'
     ): Promise<GextiaModel | null> {
         try {
             // Encontrar el final de la clase
@@ -328,7 +359,9 @@ export class ModelParser {
                 inheritFrom,
                 fields,
                 methods,
-                dependencies: manifest?.depends || []
+                dependencies: manifest?.depends || [],
+                lineNumber: startLine + 1,
+                modelType
             };
             
             return model;
@@ -571,6 +604,104 @@ export class ModelParser {
         } catch {
             return false;
         }
+    }
+
+    /**
+     * Parsea una clase de componente específica
+     */
+    private async parseComponentClass(
+        lines: string[], 
+        startLine: number, 
+        className: string, 
+        filePath: string, 
+        moduleName: string,
+        manifest: ModuleManifest | null
+    ): Promise<GextiaModel | null> {
+        try {
+            // Encontrar el final de la clase
+            const classIndent = this.getIndentLevel(lines[startLine]);
+            let endLine = startLine + 1;
+            
+            while (endLine < lines.length) {
+                const line = lines[endLine];
+                if (line.trim() && this.getIndentLevel(line) <= classIndent) {
+                    break;
+                }
+                endLine++;
+            }
+            
+            // Extraer información del componente
+            const classContent = lines.slice(startLine, endLine);
+            const componentName = this.extractComponentName(classContent);
+            const applyOn = this.extractApplyOn(classContent);
+            const collection = this.extractCollection(classContent);
+            
+            // Si no tiene _name, no es un componente válido
+            if (!componentName) {
+                return null;
+            }
+            
+            const methods = this.extractMethods(classContent, startLine);
+            
+            const model: GextiaModel = {
+                name: componentName,
+                className,
+                filePath,
+                moduleName,
+                isInherit: false,
+                inheritFrom: undefined,
+                fields: [], // Los componentes no tienen campos como los modelos
+                methods,
+                dependencies: manifest?.depends || [],
+                lineNumber: startLine + 1,
+                modelType: 'component'
+            };
+            
+            return model;
+            
+        } catch (error) {
+            this.log(`Error parsing component class ${className}: ${error}`);
+            return null;
+        }
+    }
+
+    /**
+     * Extrae el nombre del componente (_name)
+     */
+    private extractComponentName(classContent: string[]): string | null {
+        for (const line of classContent) {
+            const match = line.match(/_name\s*=\s*['"]([^'"]+)['"]/);
+            if (match) {
+                return match[1];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Extrae el modelo al que se aplica el componente (_apply_on)
+     */
+    private extractApplyOn(classContent: string[]): string | undefined {
+        for (const line of classContent) {
+            const match = line.match(/_apply_on\s*=\s*['"]([^'"]+)['"]/);
+            if (match) {
+                return match[1];
+            }
+        }
+        return undefined;
+    }
+
+    /**
+     * Extrae la colección del componente (_collection)
+     */
+    private extractCollection(classContent: string[]): string | undefined {
+        for (const line of classContent) {
+            const match = line.match(/_collection\s*=\s*['"]([^'"]+)['"]/);
+            if (match) {
+                return match[1];
+            }
+        }
+        return undefined;
     }
 
     /**

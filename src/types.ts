@@ -34,6 +34,8 @@ export interface GextiaModel {
     fields: GextiaField[];         // Campos del modelo
     methods: GextiaMethod[];       // Métodos del modelo
     dependencies: string[];        // Dependencias del módulo
+    lineNumber: number;            // Línea donde se define la clase del modelo
+    modelType: 'model' | 'abstract_model' | 'component';  // Tipo de modelo
 }
 
 export interface GextiaField {

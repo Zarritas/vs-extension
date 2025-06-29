@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as https from 'https';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { RemoteRepository } from '../types';
 
 export class RemoteRepositoryManager {
@@ -77,11 +79,28 @@ export class RemoteRepositoryManager {
                 placeHolder: 'addons/, modules/, src/addons...'
             });
 
-            // Verificar si es repositorio privado
+            // Verificar si es repositorio privado o tiene restricciones
             const isPrivate = await this.checkIfPrivateRepository(url);
             let authToken: string | undefined;
 
-            if (isPrivate) {
+            // Para repositorios de OCA y otros públicos, sugerir token opcional
+            if (this.isOCARepository(url) || this.isPublicRepositoryWithRateLimit(url)) {
+                const needsAuth = await vscode.window.showQuickPick([
+                    'Sí, configurar token (recomendado para OCA)',
+                    'No, continuar sin token',
+                    'Cancelar'
+                ], {
+                    placeHolder: 'Los repositorios de OCA tienen límites de rate limit. ¿Configurar autenticación?'
+                });
+
+                if (needsAuth === 'Cancelar') {
+                    return null;
+                }
+
+                if (needsAuth === 'Sí, configurar token (recomendado para OCA)') {
+                    authToken = await this.configureAuthentication(repoType);
+                }
+            } else if (isPrivate) {
                 const needsAuth = await vscode.window.showQuickPick(['Sí', 'No'], {
                     placeHolder: 'Este repositorio parece ser privado. ¿Configurar autenticación?'
                 });
@@ -199,24 +218,42 @@ export class RemoteRepositoryManager {
      */
     private async checkIfPrivateRepository(url: string): Promise<boolean> {
         try {
-            // Para GitHub y GitLab públicos, intentar acceso sin autenticación
-            if (url.includes('github.com') || url.includes('gitlab.com')) {
-                const apiUrl = this.getApiUrl(url);
-                if (apiUrl) {
-                    const response = await this.makeHttpRequest(apiUrl);
-                    return response.statusCode === 404; // 404 puede indicar privado
-                }
+            const apiUrl = this.getApiUrl(url);
+            if (!apiUrl) {
+                // Si no podemos verificar, asumimos que es público
+                return false;
+            }
+
+            // Para repositorios públicos, usar headers básicos sin autenticación
+            const headers = {
+                'User-Agent': 'Gextia-Dev-Helper/1.0',
+                'Accept': 'application/vnd.github.v3+json'
+            };
+
+            const response = await this.makeHttpRequest(apiUrl, headers);
+            
+            // Si obtenemos 200, es público
+            if (response.statusCode === 200) {
+                return false;
             }
             
-            // Por defecto, asumir que podría ser privado
+            // Si obtenemos 401 o 403, puede ser privado o requerir autenticación
+            if (response.statusCode === 401 || response.statusCode === 403) {
+                return true;
+            }
+            
+            // Para otros códigos, asumimos que es público
             return false;
-        } catch {
-            return true; // En caso de error, asumir privado
+
+        } catch (error) {
+            this.log(`Error checking repository privacy: ${error}`);
+            // En caso de error, asumimos que es público
+            return false;
         }
     }
 
     /**
-     * Obtiene la URL de la API para un repositorio
+     * Obtiene la URL de la API para verificar el repositorio
      */
     private getApiUrl(repoUrl: string): string | null {
         try {
@@ -250,42 +287,52 @@ export class RemoteRepositoryManager {
         };
 
         const instructions = {
-            github: 'Ve a GitHub > Settings > Developer settings > Personal access tokens > Generate new token',
-            gitlab: 'Ve a GitLab > User Settings > Access Tokens > Add a personal access token',
-            bitbucket: 'Ve a Bitbucket > Personal settings > App passwords > Create app password',
+            github: 'Ve a GitHub > Settings > Developer settings > Personal access tokens > Generate new token (solo necesitas permisos de lectura pública)',
+            gitlab: 'Ve a GitLab > User Settings > Access Tokens > Add a personal access token (solo necesitas permisos de lectura)',
+            bitbucket: 'Ve a Bitbucket > Personal settings > App passwords > Create app password (solo necesitas permisos de lectura)',
             generic: 'Consulta la documentación de tu proveedor de Git'
         };
 
         const showInstructions = await vscode.window.showInformationMessage(
-            `Necesitas un ${authMethods[repoType]} para acceder a este repositorio privado.`,
+            `Para repositorios con límites de rate limit, puedes usar un ${authMethods[repoType]} (opcional).`,
             'Ver instrucciones',
-            'Ya tengo el token'
+            'Ya tengo el token',
+            'Continuar sin token'
         );
 
         if (showInstructions === 'Ver instrucciones') {
             vscode.window.showInformationMessage(instructions[repoType]);
         }
 
+        if (showInstructions === 'Continuar sin token') {
+            return undefined;
+        }
+
         const token = await vscode.window.showInputBox({
-            prompt: `Ingresa tu ${authMethods[repoType]}`,
+            prompt: `Ingresa tu ${authMethods[repoType]} (opcional)`,
             password: true,
             placeHolder: 'ghp_xxxxxxxxxxxx...'
         });
 
-        return token;
+        return token || undefined;
     }
 
     /**
      * Prueba la conexión a un repositorio
      */
-    private async testRepositoryConnection(repository: RemoteRepository): Promise<{success: boolean, error?: string}> {
+    public async testRepositoryConnection(repository: RemoteRepository): Promise<{success: boolean, error?: string}> {
         try {
             const apiUrl = this.getApiUrl(repository.url);
             if (!apiUrl) {
-                return { success: false, error: 'No se puede verificar la conexión para este tipo de repositorio' };
+                // Si no podemos verificar la API, intentamos con la URL de descarga
+                return await this.testDownloadUrl(repository);
             }
 
-            const headers: any = {};
+            const headers: any = {
+                'User-Agent': 'Gextia-Dev-Helper/1.0',
+                'Accept': 'application/vnd.github.v3+json'
+            };
+
             if (repository.authToken) {
                 if (repository.type === 'github') {
                     headers['Authorization'] = `token ${repository.authToken}`;
@@ -300,8 +347,14 @@ export class RemoteRepositoryManager {
                 return { success: true };
             } else if (response.statusCode === 401) {
                 return { success: false, error: 'Token de autenticación inválido' };
+            } else if (response.statusCode === 403) {
+                // Para 403, puede ser rate limiting o repositorio privado
+                if (response.data.includes('rate limit')) {
+                    return { success: false, error: 'Límite de rate limit alcanzado. Intenta más tarde o usa un token de autenticación.' };
+                }
+                return { success: false, error: 'Acceso denegado. El repositorio puede ser privado.' };
             } else if (response.statusCode === 404) {
-                return { success: false, error: 'Repositorio no encontrado o privado' };
+                return { success: false, error: 'Repositorio no encontrado' };
             } else {
                 return { success: false, error: `Error HTTP ${response.statusCode}` };
             }
@@ -312,12 +365,65 @@ export class RemoteRepositoryManager {
     }
 
     /**
-     * Realiza una petición HTTP
+     * Prueba la URL de descarga directamente
      */
-    private makeHttpRequest(url: string, headers: any = {}): Promise<{statusCode: number, data: string}> {
+    private async testDownloadUrl(repository: RemoteRepository): Promise<{success: boolean, error?: string}> {
+        try {
+            const downloadUrl = this.getDownloadUrl(repository);
+            if (!downloadUrl) {
+                return { success: false, error: 'No se puede determinar la URL de descarga' };
+            }
+
+            const headers: any = {
+                'User-Agent': 'Gextia-Dev-Helper/1.0'
+            };
+
+            if (repository.authToken) {
+                if (repository.type === 'github') {
+                    headers['Authorization'] = `token ${repository.authToken}`;
+                } else if (repository.type === 'gitlab') {
+                    headers['PRIVATE-TOKEN'] = repository.authToken;
+                }
+            }
+
+            const response = await this.makeHttpRequest(downloadUrl, headers);
+            
+            if (response.statusCode === 200) {
+                return { success: true };
+            } else if (response.statusCode === 403) {
+                return { success: false, error: 'Acceso denegado. Verifica que el repositorio sea público o usa autenticación.' };
+            } else {
+                return { success: false, error: `Error HTTP ${response.statusCode} al acceder a la descarga` };
+            }
+
+        } catch (error) {
+            return { success: false, error: `Error probando URL de descarga: ${error}` };
+        }
+    }
+
+    /**
+     * Realiza una petición HTTP y sigue redirecciones
+     */
+    private makeHttpRequest(url: string, headers: any = {}, redirectCount = 0): Promise<{statusCode: number, data: string}> {
+        const MAX_REDIRECTS = 5;
         return new Promise((resolve, reject) => {
             const request = https.get(url, { headers }, (response) => {
                 let data = '';
+
+                // Manejar redirecciones
+                if ([301, 302, 307, 308].includes(response.statusCode || 0)) {
+                    const location = response.headers.location;
+                    if (location && redirectCount < MAX_REDIRECTS) {
+                        const newUrl = location.startsWith('http') ? location : new URL(location, url).toString();
+                        this.log(`Redirigiendo a: ${newUrl}`);
+                        response.destroy();
+                        resolve(this.makeHttpRequest(newUrl, headers, redirectCount + 1));
+                        return;
+                    } else {
+                        reject(new Error('Demasiadas redirecciones o Location no encontrada.'));
+                        return;
+                    }
+                }
                 
                 response.on('data', (chunk) => {
                     data += chunk;
@@ -347,29 +453,48 @@ export class RemoteRepositoryManager {
      */
     public async syncRepository(repository: RemoteRepository): Promise<boolean> {
         try {
-            this.log(`Syncing repository: ${repository.name}`);
+            this.log(`=== Iniciando sincronización de repositorio: ${repository.name} ===`);
+            this.log(`URL: ${repository.url}`);
+            this.log(`Tipo: ${repository.type}`);
+            this.log(`Rama: ${repository.branch || 'main'}`);
+            this.log(`Subcarpeta: ${repository.subfolder || 'ninguna'}`);
+            this.log(`Tiene token: ${repository.authToken ? 'Sí' : 'No'}`);
 
             // Crear directorio de caché si no existe
             const cachePath = repository.localCachePath!;
+            this.log(`Directorio de caché: ${cachePath}`);
             await fs.promises.mkdir(cachePath, { recursive: true });
 
             // Determinar URL de descarga
             const downloadUrl = this.getDownloadUrl(repository);
             if (!downloadUrl) {
-                throw new Error('Cannot determine download URL');
+                throw new Error('No se puede determinar la URL de descarga para este tipo de repositorio');
             }
+            this.log(`URL de descarga: ${downloadUrl}`);
+
+            // Probar la URL de descarga antes de descargar
+            this.log('Probando acceso a la URL de descarga...');
+            const testResult = await this.testDownloadUrl(repository);
+            if (!testResult.success) {
+                throw new Error(`Error al probar URL de descarga: ${testResult.error}`);
+            }
+            this.log('✓ URL de descarga accesible');
 
             // Descargar y extraer contenido
+            this.log('Iniciando descarga y extracción...');
             await this.downloadAndExtract(downloadUrl, cachePath, repository);
 
             // Actualizar timestamp de sincronización
             repository.lastSync = new Date();
 
-            this.log(`Repository ${repository.name} synced successfully`);
+            this.log(`=== Repositorio ${repository.name} sincronizado exitosamente ===`);
             return true;
 
         } catch (error) {
-            this.log(`Error syncing repository ${repository.name}: ${error}`);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            this.log(`=== ERROR sincronizando repositorio ${repository.name} ===`);
+            this.log(`Error: ${errorMessage}`);
+            this.log(`Stack: ${error instanceof Error ? error.stack : 'No disponible'}`);
             return false;
         }
     }
@@ -393,24 +518,271 @@ export class RemoteRepositoryManager {
      * Descarga y extrae el contenido de un repositorio
      */
     private async downloadAndExtract(url: string, cachePath: string, repository: RemoteRepository): Promise<void> {
-        // Simplificación: por ahora solo crear un archivo indicador
-        // En una implementación completa, aquí descargarías y extraerías el ZIP
+        let tempDir: string | null = null;
+        try {
+            this.log(`Iniciando descarga desde: ${url}`);
+            
+            // Crear directorio temporal para la descarga
+            tempDir = path.join(cachePath, 'temp');
+            this.log(`Directorio temporal: ${tempDir}`);
+            await fs.promises.mkdir(tempDir, { recursive: true });
+            
+            // Descargar archivo ZIP
+            const zipPath = path.join(tempDir, 'repository.zip');
+            this.log(`Descargando ZIP a: ${zipPath}`);
+            await this.downloadFile(url, zipPath, repository);
+            this.log('✓ Archivo ZIP descargado exitosamente');
+            
+            // Verificar que el archivo existe y tiene contenido
+            const stats = await fs.promises.stat(zipPath);
+            this.log(`Tamaño del archivo ZIP: ${stats.size} bytes`);
+            if (stats.size === 0) {
+                throw new Error('El archivo ZIP descargado está vacío');
+            }
+            
+            // Extraer contenido
+            this.log('Extrayendo contenido del ZIP...');
+            await this.extractZip(zipPath, tempDir);
+            this.log('✓ Contenido extraído exitosamente');
+            
+            // Encontrar la carpeta extraída
+            this.log('Buscando carpeta extraída...');
+            const extractedDir = path.join(tempDir, await this.findExtractedFolder(tempDir));
+            this.log(`Carpeta extraída encontrada: ${extractedDir}`);
+            
+            // Determinar ruta final
+            const finalPath = repository.subfolder 
+                ? path.join(cachePath, repository.subfolder)
+                : cachePath;
+            this.log(`Ruta final: ${finalPath}`);
+                
+            // Mover contenido a la ubicación final
+            this.log('Moviendo contenido a ubicación final...');
+            await this.moveDirectory(extractedDir, finalPath);
+            this.log('✓ Contenido movido exitosamente');
+            
+            // Crear archivo indicador
+            const indicatorPath = path.join(cachePath, '.gextia-remote-repo');
+            const repoInfo = {
+                url: repository.url,
+                branch: repository.branch,
+                lastSync: new Date().toISOString(),
+                type: repository.type
+            };
+            
+            await fs.promises.writeFile(indicatorPath, JSON.stringify(repoInfo, null, 2));
+            this.log(`Archivo indicador creado: ${indicatorPath}`);
+            
+            this.log(`=== Repositorio descargado y extraído exitosamente a: ${cachePath} ===`);
+            
+        } catch (error) {
+            this.log(`=== ERROR en downloadAndExtract ===`);
+            this.log(`Error: ${error instanceof Error ? error.message : String(error)}`);
+            this.log(`Stack: ${error instanceof Error ? error.stack : 'No disponible'}`);
+            throw error;
+        } finally {
+            // Limpiar archivos temporales de forma segura
+            if (tempDir) {
+                try {
+                    this.log('Limpiando archivos temporales...');
+                    await this.safeRemoveDirectory(tempDir);
+                    this.log('✓ Archivos temporales eliminados');
+                } catch (cleanupError) {
+                    this.log(`⚠ Error limpiando archivos temporales: ${cleanupError}`);
+                }
+            }
+        }
+    }
+
+    /**
+     * Descarga un archivo desde una URL, siguiendo redirecciones
+     */
+    private async downloadFile(url: string, filePath: string, repository: RemoteRepository, redirectCount = 0): Promise<void> {
+        const MAX_REDIRECTS = 5;
+        return new Promise((resolve, reject) => {
+            const file = fs.createWriteStream(filePath);
+            
+            const options: any = {
+                headers: {
+                    'User-Agent': 'Gextia-Dev-Helper/1.0'
+                }
+            };
+            
+            // Agregar headers de autenticación si es necesario
+            if (repository.authToken) {
+                if (repository.type === 'github') {
+                    options.headers['Authorization'] = `token ${repository.authToken}`;
+                } else if (repository.type === 'gitlab') {
+                    options.headers['PRIVATE-TOKEN'] = repository.authToken;
+                }
+            }
+            
+            const request = https.get(url, options, (response) => {
+                // Manejar redirecciones
+                if ([301, 302, 307, 308].includes(response.statusCode || 0)) {
+                    const location = response.headers.location;
+                    if (location && redirectCount < MAX_REDIRECTS) {
+                        const newUrl = location.startsWith('http') ? location : new URL(location, url).toString();
+                        this.log(`Redirigiendo descarga a: ${newUrl}`);
+                        response.destroy();
+                        // Llamada recursiva para seguir la redirección
+                        this.downloadFile(newUrl, filePath, repository, redirectCount + 1).then(resolve).catch(reject);
+                        return;
+                    } else {
+                        reject(new Error('Demasiadas redirecciones o Location no encontrada en descarga.'));
+                        return;
+                    }
+                }
+                
+                if (response.statusCode === 200) {
+                    response.pipe(file);
+                    
+                    file.on('finish', () => {
+                        file.close();
+                        resolve();
+                    });
+                } else if (response.statusCode === 403) {
+                    // Manejar específicamente el error 403
+                    let errorMessage = `HTTP 403: Acceso denegado`;
+                    
+                    // Intentar leer el cuerpo de la respuesta para más detalles
+                    let responseData = '';
+                    response.on('data', (chunk) => {
+                        responseData += chunk;
+                    });
+                    
+                    response.on('end', () => {
+                        if (responseData.includes('rate limit')) {
+                            errorMessage = 'Límite de rate limit alcanzado. Intenta más tarde o usa un token de autenticación.';
+                        } else if (responseData.includes('private')) {
+                            errorMessage = 'El repositorio es privado. Necesitas autenticación.';
+                        }
+                        reject(new Error(errorMessage));
+                    });
+                } else {
+                    reject(new Error(`HTTP ${response.statusCode}: ${response.statusMessage}`));
+                }
+            });
+            
+            request.on('error', (error) => {
+                reject(error);
+            });
+            
+            request.setTimeout(30000, () => {
+                request.destroy();
+                reject(new Error('Download timeout'));
+            });
+        });
+    }
+
+    /**
+     * Extrae un archivo ZIP
+     */
+    private async extractZip(zipPath: string, extractPath: string): Promise<void> {
+        // Para una implementación completa, necesitarías una librería como 'unzipper' o 'adm-zip'
+        // Por ahora, usaremos una implementación simplificada
         
-        const indicatorPath = path.join(cachePath, '.gextia-remote-repo');
-        const repoInfo = {
-            url: repository.url,
-            branch: repository.branch,
-            lastSync: new Date().toISOString(),
-            type: repository.type
-        };
+        const execAsync = promisify(exec);
         
-        await fs.promises.writeFile(indicatorPath, JSON.stringify(repoInfo, null, 2));
+        try {
+            // Usar comando del sistema para extraer
+            if (process.platform === 'win32') {
+                await execAsync(`powershell -command "Expand-Archive -Path '${zipPath}' -DestinationPath '${extractPath}' -Force"`);
+            } else {
+                await execAsync(`unzip -o '${zipPath}' -d '${extractPath}'`);
+            }
+        } catch (error) {
+            this.log(`Error extracting ZIP: ${error}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Encuentra la carpeta extraída (normalmente tiene el nombre del repositorio)
+     */
+    private async findExtractedFolder(basePath: string): Promise<string> {
+        const items = await fs.promises.readdir(basePath);
+        const directories = [];
         
-        // TODO: Implementar descarga real del repositorio
-        // 1. Descargar ZIP desde URL
-        // 2. Extraer contenido
-        // 3. Si hay subfolder, mover archivos
-        // 4. Limpiar archivos temporales
+        for (const item of items) {
+            const itemPath = path.join(basePath, item);
+            const stat = await fs.promises.stat(itemPath);
+            if (stat.isDirectory()) {
+                directories.push(item);
+            }
+        }
+        
+        return directories[0] || '';
+    }
+
+    /**
+     * Mueve un directorio de una ubicación a otra con manejo de errores de permisos
+     */
+    private async moveDirectory(source: string, destination: string): Promise<void> {
+        try {
+            this.log(`Moviendo directorio de ${source} a ${destination}`);
+            
+            // Crear directorio de destino si no existe
+            await fs.promises.mkdir(destination, { recursive: true });
+            
+            // Mover archivos
+            const items = await fs.promises.readdir(source);
+            
+            for (const item of items) {
+                const sourcePath = path.join(source, item);
+                const destPath = path.join(destination, item);
+                
+                const stat = await fs.promises.stat(sourcePath);
+                
+                if (stat.isDirectory()) {
+                    await this.moveDirectory(sourcePath, destPath);
+                } else {
+                    try {
+                        // Intentar renombrar primero (más eficiente)
+                        await fs.promises.rename(sourcePath, destPath);
+                    } catch (renameError) {
+                        // Si falla el renombrar, intentar copiar y luego eliminar
+                        this.log(`Renombrar falló, intentando copiar: ${item}`);
+                        await this.copyFileWithRetry(sourcePath, destPath);
+                        try {
+                            await fs.promises.unlink(sourcePath);
+                        } catch (deleteError) {
+                            this.log(`No se pudo eliminar archivo original: ${sourcePath}`);
+                        }
+                    }
+                }
+            }
+            
+            // Intentar eliminar el directorio fuente si está vacío
+            try {
+                await fs.promises.rmdir(source);
+            } catch (error) {
+                this.log(`No se pudo eliminar directorio fuente: ${source}`);
+            }
+            
+        } catch (error) {
+            this.log(`Error moviendo directorio: ${error}`);
+            throw error;
+        }
+    }
+
+    /**
+     * Copia un archivo con reintentos para manejar errores de permisos
+     */
+    private async copyFileWithRetry(source: string, destination: string, retries = 3): Promise<void> {
+        for (let i = 0; i < retries; i++) {
+            try {
+                // Usar copyFile en lugar de rename para evitar problemas de permisos
+                await fs.promises.copyFile(source, destination);
+                return;
+            } catch (error) {
+                if (i === retries - 1) {
+                    throw error;
+                }
+                this.log(`Intento ${i + 1} falló, reintentando en 1 segundo...`);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+        }
     }
 
     /**
@@ -448,11 +820,69 @@ export class RemoteRepositoryManager {
     }
 
     /**
-     * Log para debug
+     * Registra un mensaje en el log
      */
     private log(message: string): void {
-        if (vscode.workspace.getConfiguration('gextia-dev-helper').get('enableDebugMode')) {
-            this.outputChannel.appendLine(`[${new Date().toISOString()}] ${message}`);
+        const timestamp = new Date().toLocaleTimeString();
+        const logMessage = `[${timestamp}] ${message}`;
+        this.outputChannel.appendLine(logMessage);
+        console.log(logMessage); // También mostrar en consola de desarrollo
+    }
+
+    /**
+     * Verifica si es un repositorio de OCA
+     */
+    private isOCARepository(url: string): boolean {
+        return url.includes('github.com/OCA/') || 
+               url.includes('github.com/oca/') ||
+               url.toLowerCase().includes('oca');
+    }
+
+    /**
+     * Verifica si es un repositorio público que puede tener rate limiting
+     */
+    private isPublicRepositoryWithRateLimit(url: string): boolean {
+        // Repositorios conocidos que pueden tener rate limiting
+        const knownRepos = [
+            'github.com/odoo/',
+            'github.com/OCA/',
+            'github.com/oca/',
+            'github.com/odoo-community/',
+            'github.com/odoo-enterprise/'
+        ];
+        
+        return knownRepos.some(repo => url.toLowerCase().includes(repo.toLowerCase()));
+    }
+
+    /**
+     * Muestra el log de sincronización al usuario
+     */
+    public showLog(): void {
+        this.outputChannel.show();
+    }
+
+    /**
+     * Limpia el log
+     */
+    public clearLog(): void {
+        this.outputChannel.clear();
+    }
+
+    /**
+     * Elimina un directorio de forma segura con reintentos
+     */
+    private async safeRemoveDirectory(dirPath: string, retries = 3): Promise<void> {
+        for (let i = 0; i < retries; i++) {
+            try {
+                await fs.promises.rm(dirPath, { recursive: true, force: true });
+                return;
+            } catch (error) {
+                if (i === retries - 1) {
+                    throw error;
+                }
+                this.log(`Intento ${i + 1} de eliminación falló, reintentando en 2 segundos...`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+            }
         }
     }
 }

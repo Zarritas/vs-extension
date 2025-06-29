@@ -56,7 +56,7 @@
         "category": "Gextia"
       },
       {
-        "command": "Gextia-dev-helper.showInheritanceTree",
+        "command": "gextia-dev-helper.showInheritanceTree",
         "title": "Show Model Inheritance Tree",
         "category": "Gextia"
       },
@@ -73,6 +73,51 @@
       {
         "command": "gextia-dev-helper.showRemoteRepositoriesInfo",
         "title": "Show Remote Repositories Info",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.goToModelDefinition",
+        "title": "Go to Model Definition",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.addProjectPath",
+        "title": "Add Path to Current Project",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.addRemoteRepository",
+        "title": "Add Remote Repository to Current Project",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.manageProjectPaths",
+        "title": "Manage Project Paths and Repositories",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.showSyncLog",
+        "title": "Show Remote Repositories Sync Log",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.clearSyncLog",
+        "title": "Clear Remote Repositories Sync Log",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.testRepositoryConnection",
+        "title": "Test Remote Repository Connection",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.showCacheLog",
+        "title": "Show Models Cache Log",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.debugRefreshCache",
+        "title": "Debug Refresh Models Cache",
         "category": "Gextia"
       }
     ],
@@ -141,6 +186,7 @@
     "typescript": "^4.9.4"
   },
   "dependencies": {
-    "glob": "^8.0.3"
+    "glob": "^8.0.3",
+    "adm-zip": "^0.5.10"
   }
 }

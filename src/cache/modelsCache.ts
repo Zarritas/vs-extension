@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
-import { GextiaModel, GextiaField, GextiaMethod } from '../types';
-import { ModelParser,  } from '../parser/modelParser';
+import { GextiaModel, GextiaField, GextiaMethod, ModuleManifest } from '../types';
+import { ModelParser } from '../parser/modelParser';
 import { ProjectManager } from '../config/projectManager';
 
 export class ModelsCache {
@@ -69,7 +69,7 @@ export class ModelsCache {
         }
 
         this.isRefreshing = true;
-        this.log('Refreshing models cache...');
+        this.log('=== INICIANDO REFRESH DEL CACHE ===');
 
         try {
             // Limpiar caché actual
@@ -80,12 +80,36 @@ export class ModelsCache {
             const modelParser = ModelParser.getInstance();
             const allPaths = projectManager.getAllModelsPaths();
 
+            this.log(`Total de rutas a analizar: ${allPaths.length}`);
+            this.log('Rutas encontradas:');
+            allPaths.forEach((path, index) => {
+                this.log(`  ${index + 1}. ${path} ${fs.existsSync(path) ? '✅' : '❌'}`);
+            });
+
             // Parsear modelos en cada ruta
             for (const modelPath of allPaths) {
-                this.log(`Parsing models in: ${modelPath}`);
+                this.log(`\n--- Analizando ruta: ${modelPath} ---`);
+                
+                if (!fs.existsSync(modelPath)) {
+                    this.log(`⚠️  Ruta no existe, saltando: ${modelPath}`);
+                    continue;
+                }
                 
                 try {
                     const pathModels = await modelParser.parseModelsInPath(modelPath);
+                    this.log(`📊 Modelos encontrados en esta ruta: ${pathModels.size}`);
+                    
+                    // Mostrar algunos modelos encontrados para debugging
+                    let modelCount = 0;
+                    for (const [modelName, models] of pathModels) {
+                        if (modelCount < 5) { // Solo mostrar los primeros 5 para no saturar el log
+                            this.log(`  - ${modelName}: ${models.length} definiciones`);
+                        }
+                        modelCount++;
+                    }
+                    if (modelCount > 5) {
+                        this.log(`  ... y ${modelCount - 5} modelos más`);
+                    }
                     
                     // Merge con el caché existente
                     for (const [modelName, models] of pathModels) {
@@ -99,14 +123,16 @@ export class ModelsCache {
                     await this.updateFileModificationTimes(modelPath);
                     
                 } catch (error) {
-                    this.log(`Error parsing models in ${modelPath}: ${error}`);
+                    this.log(`❌ Error analizando modelos en ${modelPath}: ${error}`);
                 }
             }
 
-            this.log(`Cache refreshed: ${this.getTotalModelsCount()} models loaded`);
+            this.log(`\n=== CACHE REFRESH COMPLETADO ===`);
+            this.log(`📈 Total de modelos cargados: ${this.getTotalModelsCount()}`);
+            this.log(`📊 Tipos únicos de modelos: ${this.cache.size}`);
             
         } catch (error) {
-            this.log(`Error refreshing cache: ${error}`);
+            this.log(`❌ Error refrescando cache: ${error}`);
             throw error;
         } finally {
             this.isRefreshing = false;
@@ -186,7 +212,6 @@ export class ModelsCache {
         this.log(`Updating cache for file: ${filePath}`);
 
         try {
-            const projectManager = ProjectManager.getInstance();
             const modelParser = ModelParser.getInstance();
             
             // Encontrar el módulo al que pertenece el archivo
@@ -199,8 +224,10 @@ export class ModelsCache {
             // Remover modelos antiguos de este archivo
             this.removeModelsFromFile(filePath);
 
+            // Cargar manifest del módulo
+            const manifest = await this.loadModuleManifest(filePath);
+            
             // Parsear el archivo actualizado
-            const manifest = null; // TODO: Cargar manifest si es necesario
             const models = await modelParser.parseModelsInFile(filePath, moduleName, manifest);
 
             // Agregar modelos al caché
@@ -220,6 +247,50 @@ export class ModelsCache {
         } catch (error) {
             this.log(`Error updating cache for ${filePath}: ${error}`);
         }
+    }
+
+    /**
+     * Carga el manifest de un módulo
+     */
+    private async loadModuleManifest(filePath: string): Promise<ModuleManifest | null> {
+        try {
+            const modulePath = this.getModulePathFromFilePath(filePath);
+            if (!modulePath) {
+                return null;
+            }
+            
+            const modelParser = ModelParser.getInstance();
+            return await modelParser.parseManifest(modulePath);
+            
+        } catch (error) {
+            this.log(`Error loading manifest for ${filePath}: ${error}`);
+            return null;
+        }
+    }
+
+    /**
+     * Obtiene la ruta del módulo desde la ruta del archivo
+     */
+    private getModulePathFromFilePath(filePath: string): string | null {
+        const parts = filePath.split(path.sep);
+        
+        // Buscar el directorio que contiene __manifest__.py
+        for (let i = parts.length - 1; i >= 0; i--) {
+            const possibleModulePath = parts.slice(0, i + 1).join(path.sep);
+            
+            try {
+                const manifestPath = path.join(possibleModulePath, '__manifest__.py');
+                const openerp = path.join(possibleModulePath, '__openerp__.py');
+                
+                if (fs.existsSync(manifestPath) || fs.existsSync(openerp)) {
+                    return possibleModulePath;
+                }
+            } catch {
+                // Continuar buscando
+            }
+        }
+        
+        return null;
     }
 
     /**
@@ -400,8 +471,22 @@ export class ModelsCache {
      * Log para debug
      */
     private log(message: string): void {
+        const timestamp = new Date().toLocaleTimeString();
+        const logMessage = `[${timestamp}] ${message}`;
+        
+        // Siempre mostrar en el output channel
+        this.outputChannel.appendLine(logMessage);
+        
+        // También mostrar en consola si debug mode está habilitado
         if (vscode.workspace.getConfiguration('gextia-dev-helper').get('enableDebugMode')) {
-            this.outputChannel.appendLine(`[${new Date().toISOString()}] ${message}`);
+            console.log(logMessage);
         }
+    }
+
+    /**
+     * Obtiene todos los modelos disponibles como Map
+     */
+    public getAllModelsMap(): Map<string, GextiaModel[]> {
+        return new Map(this.cache);
     }
 }

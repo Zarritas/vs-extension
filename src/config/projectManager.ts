@@ -448,20 +448,67 @@ export class ProjectManager {
      * Obtiene todas las rutas de addons del perfil actual
      */
     public getAllAddonsPaths(): string[] {
-        if (!this.currentProfile) {return [];}
+        if (!this.currentProfile) {
+            this.log('No hay perfil activo, retornando rutas vacías');
+            return [];
+        }
         
+        this.log('=== OBTENIENDO RUTAS DE ADDONS ===');
         const allPaths: string[] = [];
         
         // Agregar rutas de addons personalizados
         if (this.currentProfile.paths.addonsPath) {
-            allPaths.push(...this.currentProfile.paths.addonsPath);
+            this.log(`Rutas de addons personalizados: ${this.currentProfile.paths.addonsPath.length}`);
+            this.currentProfile.paths.addonsPath.forEach((path, index) => {
+                this.log(`  ${index + 1}. ${path}`);
+                allPaths.push(path);
+            });
+        } else {
+            this.log('No hay rutas de addons personalizados configuradas');
+        }
+        
+        // Agregar rutas de repositorios remotos sincronizados
+        if (this.currentProfile.paths.remoteRepositories) {
+            this.log(`Repositorios remotos configurados: ${this.currentProfile.paths.remoteRepositories.length}`);
+            const remoteManager = RemoteRepositoryManager.getInstance();
+            
+            for (const repo of this.currentProfile.paths.remoteRepositories) {
+                this.log(`\n--- Repositorio: ${repo.name} ---`);
+                this.log(`  URL: ${repo.url}`);
+                this.log(`  Habilitado: ${repo.enabled ? 'Sí' : 'No'}`);
+                this.log(`  Ruta local: ${repo.localCachePath || 'No configurada'}`);
+                
+                if (repo.enabled && repo.localCachePath) {
+                    const localPath = remoteManager.getLocalPath(repo);
+                    this.log(`  Ruta final calculada: ${localPath || 'No disponible'}`);
+                    
+                    if (localPath && fs.existsSync(localPath)) {
+                        this.log(`  ✅ Agregando ruta de repositorio remoto: ${localPath}`);
+                        allPaths.push(localPath);
+                    } else {
+                        this.log(`  ❌ Ruta no existe o no disponible: ${localPath}`);
+                    }
+                } else {
+                    this.log(`  ⚠️  Repositorio no habilitado o sin ruta local`);
+                }
+            }
+        } else {
+            this.log('No hay repositorios remotos configurados');
         }
         
         // Agregar ruta de addons de Gextia Core
         if (this.currentProfile.paths.gextiaPath) {
             const coreAddonsPath = path.join(this.currentProfile.paths.gextiaPath, 'addons');
+            this.log(`Ruta de addons de Gextia Core: ${coreAddonsPath}`);
             allPaths.push(coreAddonsPath);
+        } else {
+            this.log('No hay ruta de Gextia Core configurada');
         }
+        
+        this.log(`\n=== TOTAL DE RUTAS ENCONTRADAS: ${allPaths.length} ===`);
+        allPaths.forEach((path, index) => {
+            this.log(`  ${index + 1}. ${path} ${fs.existsSync(path) ? '✅' : '❌'}`);
+        });
         
         return allPaths;
     }
@@ -518,8 +565,207 @@ export class ProjectManager {
      * Log para debug
      */
     public log(message: string): void {
+        const timestamp = new Date().toLocaleTimeString();
+        const logMessage = `[${timestamp}] ${message}`;
+        
+        // Siempre mostrar en el output channel
+        this.outputChannel.appendLine(logMessage);
+        
+        // También mostrar en consola si debug mode está habilitado
         if (vscode.workspace.getConfiguration('gextia-dev-helper').get('enableDebugMode')) {
-            this.outputChannel.appendLine(`[${new Date().toISOString()}] ${message}`);
+            console.log(logMessage);
         }
+    }
+
+    /**
+     * Agrega una nueva ruta de addons al proyecto actual
+     */
+    public async addAddonsPath(addonsPath: string): Promise<boolean> {
+        if (!this.currentProfile) {
+            vscode.window.showWarningMessage('No hay un perfil activo. Crea uno primero.');
+            return false;
+        }
+
+        try {
+            // Verificar que la ruta existe
+            if (!fs.existsSync(addonsPath)) {
+                vscode.window.showWarningMessage(`La ruta no existe: ${addonsPath}`);
+                return false;
+            }
+
+            // Verificar que no esté ya agregada
+            if (this.currentProfile.paths.addonsPath.includes(addonsPath)) {
+                vscode.window.showInformationMessage('Esta ruta ya está agregada al proyecto.');
+                return false;
+            }
+
+            // Agregar la ruta
+            this.currentProfile.paths.addonsPath.push(addonsPath);
+            await this.saveProfiles();
+
+            this.log(`Addons path added: ${addonsPath}`);
+            vscode.window.showInformationMessage(`Ruta agregada: ${addonsPath}`);
+
+            return true;
+
+        } catch (error) {
+            this.log(`Error adding addons path: ${error}`);
+            vscode.window.showErrorMessage(`Error agregando ruta: ${error}`);
+            return false;
+        }
+    }
+
+    /**
+     * Agrega un nuevo repositorio remoto al proyecto actual
+     */
+    public async addRemoteRepository(repository: RemoteRepository): Promise<boolean> {
+        if (!this.currentProfile) {
+            vscode.window.showWarningMessage('No hay un perfil activo. Crea uno primero.');
+            return false;
+        }
+
+        try {
+            // Verificar que no esté ya agregado
+            const existingRepo = this.currentProfile.paths.remoteRepositories?.find(
+                repo => repo.name === repository.name || repo.url === repository.url
+            );
+
+            if (existingRepo) {
+                vscode.window.showInformationMessage('Este repositorio ya está agregado al proyecto.');
+                return false;
+            }
+
+            // Inicializar array si no existe
+            if (!this.currentProfile.paths.remoteRepositories) {
+                this.currentProfile.paths.remoteRepositories = [];
+            }
+
+            // Agregar el repositorio
+            this.currentProfile.paths.remoteRepositories.push(repository);
+            await this.saveProfiles();
+
+            this.log(`Remote repository added: ${repository.name}`);
+            vscode.window.showInformationMessage(`Repositorio agregado: ${repository.name}`);
+
+            return true;
+
+        } catch (error) {
+            this.log(`Error adding remote repository: ${error}`);
+            vscode.window.showErrorMessage(`Error agregando repositorio: ${error}`);
+            return false;
+        }
+    }
+
+    /**
+     * Remueve una ruta de addons del proyecto actual
+     */
+    public async removeAddonsPath(addonsPath: string): Promise<boolean> {
+        if (!this.currentProfile) {
+            vscode.window.showWarningMessage('No hay un perfil activo.');
+            return false;
+        }
+
+        try {
+            const index = this.currentProfile.paths.addonsPath.indexOf(addonsPath);
+            if (index === -1) {
+                vscode.window.showWarningMessage('Esta ruta no está en el proyecto.');
+                return false;
+            }
+
+            this.currentProfile.paths.addonsPath.splice(index, 1);
+            await this.saveProfiles();
+
+            this.log(`Addons path removed: ${addonsPath}`);
+            vscode.window.showInformationMessage(`Ruta removida: ${addonsPath}`);
+
+            return true;
+
+        } catch (error) {
+            this.log(`Error removing addons path: ${error}`);
+            vscode.window.showErrorMessage(`Error removiendo ruta: ${error}`);
+            return false;
+        }
+    }
+
+    /**
+     * Remueve un repositorio remoto del proyecto actual
+     */
+    public async removeRemoteRepository(repositoryName: string): Promise<boolean> {
+        if (!this.currentProfile || !this.currentProfile.paths.remoteRepositories) {
+            vscode.window.showWarningMessage('No hay repositorios configurados.');
+            return false;
+        }
+
+        try {
+            const index = this.currentProfile.paths.remoteRepositories.findIndex(
+                repo => repo.name === repositoryName
+            );
+
+            if (index === -1) {
+                vscode.window.showWarningMessage('Este repositorio no está en el proyecto.');
+                return false;
+            }
+
+            const removedRepo = this.currentProfile.paths.remoteRepositories.splice(index, 1)[0];
+            await this.saveProfiles();
+
+            this.log(`Remote repository removed: ${removedRepo.name}`);
+            vscode.window.showInformationMessage(`Repositorio removido: ${removedRepo.name}`);
+
+            return true;
+
+        } catch (error) {
+            this.log(`Error removing remote repository: ${error}`);
+            vscode.window.showErrorMessage(`Error removiendo repositorio: ${error}`);
+            return false;
+        }
+    }
+
+    /**
+     * Muestra información detallada del proyecto actual
+     */
+    public showProjectInfo(): void {
+        if (!this.currentProfile) {
+            vscode.window.showWarningMessage('No hay un perfil activo.');
+            return;
+        }
+
+        let message = `**Proyecto: ${this.currentProfile.name}**\n\n`;
+        
+        if (this.currentProfile.description) {
+            message += `📝 Descripción: ${this.currentProfile.description}\n\n`;
+        }
+
+        message += `🏷️ Versión Gextia: ${this.currentProfile.gextiaVersion}\n\n`;
+
+        // Rutas de addons
+        message += `📁 **Rutas de Addons (${this.currentProfile.paths.addonsPath.length})**\n`;
+        if (this.currentProfile.paths.addonsPath.length > 0) {
+            for (const addonsPath of this.currentProfile.paths.addonsPath) {
+                message += `   • ${addonsPath}\n`;
+            }
+        } else {
+            message += `   Ninguna configurada\n`;
+        }
+        message += '\n';
+
+        // Repositorios remotos
+        message += `🌐 **Repositorios Remotos (${this.currentProfile.paths.remoteRepositories?.length || 0})**\n`;
+        if (this.currentProfile.paths.remoteRepositories && this.currentProfile.paths.remoteRepositories.length > 0) {
+            for (const repo of this.currentProfile.paths.remoteRepositories) {
+                const status = repo.enabled ? '✅' : '❌';
+                message += `   ${status} ${repo.name}\n`;
+                message += `      URL: ${repo.url}\n`;
+                message += `      Rama: ${repo.branch || 'main'}\n`;
+                if (repo.subfolder) {
+                    message += `      Subcarpeta: ${repo.subfolder}\n`;
+                }
+                message += '\n';
+            }
+        } else {
+            message += `   Ninguno configurado\n`;
+        }
+
+        vscode.window.showInformationMessage(message);
     }
 }
