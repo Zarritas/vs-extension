@@ -1,13 +1,27 @@
 export interface GextiaProjectProfile{
-    name: string;                   // Nombre del proyecto
-    description?: string;           // Descipción del proyecto
+    name: string;                                   // Nombre del proyecto
+    description?: string;                           // Descipción del proyecto
     paths: {
-        addonsPath: string[];       // Rutas de addons
-        gextiaPath?: string;        // Ruta de Gextia core
+        addonsPath: string[];                       // Rutas de addons
+        gextiaPath?: string;                        // Ruta de Gextia core
+        remoteRepositories?: RemoteRepository[];    // Repositorios remotos
     }
-    gextiaVersion: string;          // Versión de Gextia
-    excludePatterns?: string[];     // Patrones de archivos/carpetas a excluir
-    customModulePaths?: string[];   // Tutas adicionales de módulos
+    gextiaVersion: string;                          // Versión de Gextia
+    excludePatterns?: string[];                     // Patrones de archivos/carpetas a excluir
+    customModulePaths?: string[];                   // Tutas adicionales de módulos
+}
+
+export interface RemoteRepository {
+    name: string;                                           // Nombre descriptivo del repositorio
+    url: string;                                            // URL del repositorio (GitHub, GitLab, etc.)
+    type: 'github' | 'gitlab' | 'bitbucket' | 'generic';    // Tipo de repositorio
+    branch?: string;                                        // Rama específica (default: main/master)
+    subfolder?: string;                                     // Subcarpeta dentro del repo (ej: 'addons/')
+    authToken?: string;                                     // Token de autenticación para repos privados
+    lastSync?: Date;                                        // Última sincronización
+    localCachePath?: string;                                // Ruta local del caché
+    isPrivate?: boolean;                                    // Si el repositorio es privado
+    enabled: boolean;                                       // Si está habilitado para análisis
 }
 
 export interface GextiaModel {

@@ -2,21 +2,36 @@
   "name": "gextia-dev-helper",
   "displayName": "Gextia Development Helper",
   "description": "Intelligent autocompletion and project management for Gextia development",
-  "version": "0.0.1",
+  "version": "1.0.0",
+  "publisher": "Jesús Lorenzo",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Zarritas/vs-extension.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Zarritas/vs-extension/issues"
+  },
+  "homepage": "https://github.com/Zarritas/vs-extension#readme",
+  "galleryBanner": {
+    "color": "#8e44ad",
+    "theme": "dark"
+  },
   "engines": {
     "vscode": "^1.74.0"
   },
   "categories": [
-    "Other",
+    "Programming Languages",
     "Snippets",
-    "Programming Languages"
+    "Other"
   ],
   "keywords": [
     "Gextia",
     "python",
     "erp",
     "autocompletion",
-    "inheritance"
+    "inheritance",
+    "models",
+    "development"
   ],
   "activationEvents": [
     "onLanguage:python",
@@ -43,6 +58,21 @@
       {
         "command": "Gextia-dev-helper.showInheritanceTree",
         "title": "Show Model Inheritance Tree",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.showCacheStats",
+        "title": "Show Models Cache Statistics",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.syncRemoteRepositories",
+        "title": "Sync Remote Repositories",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.showRemoteRepositoriesInfo",
+        "title": "Show Remote Repositories Info",
         "category": "Gextia"
       }
     ],
@@ -97,11 +127,17 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
     "@types/vscode": "^1.74.0",
     "@types/node": "16.x",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "eslint": "^8.28.0",
     "typescript": "^4.9.4"
   },
   "dependencies": {
