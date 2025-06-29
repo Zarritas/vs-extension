@@ -1,0 +1,110 @@
+{
+  "name": "gextia-dev-helper",
+  "displayName": "Gextia Development Helper",
+  "description": "Intelligent autocompletion and project management for Gextia development",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other",
+    "Snippets",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "Gextia",
+    "python",
+    "erp",
+    "autocompletion",
+    "inheritance"
+  ],
+  "activationEvents": [
+    "onLanguage:python",
+    "workspaceContains:**/__manifest__.py"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "gextia-dev-helper.createProfile",
+        "title": "Create Gextia Project Profile",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.switchProfile",
+        "title": "Switch Gextia Project Profile",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.refreshModels",
+        "title": "Refresh Gextia Models Cache",
+        "category": "Gextia"
+      },
+      {
+        "command": "Gextia-dev-helper.showInheritanceTree",
+        "title": "Show Model Inheritance Tree",
+        "category": "Gextia"
+      }
+    ],
+    "configuration": {
+      "title": "Gextia Development Helper",
+      "properties": {
+        "gextia-dev-helper.currentProfile": {
+          "type": "string",
+          "default": "",
+          "description": "Current active Gextia project profile"
+        },
+        "gextia-dev-helper.profiles": {
+          "type": "object",
+          "default": {},
+          "description": "Gextia project profiles configuration"
+        },
+        "gextia-dev-helper.gextiaVersion": {
+          "type": "string",
+          "enum": ["11.0", "12.0", "13.0", "14.0", "15.0", "16.0", "17.0"],
+          "default": "16.0",
+          "description": "Gextia version for the current project"
+        },
+        "gextia-dev-helper.enableDebugMode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable debug mode for development"
+        },
+        "gextia-dev-helper.autoRefreshOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh models cache when Python files are saved"
+        }
+      }
+    },
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "gextia-dev-helper.showInheritanceTree",
+          "when": "resourceExtname == .py",
+          "group": "gextia"
+        }
+      ]
+    },
+    "languages": [
+      {
+        "id": "python",
+        "extensions": [".py"]
+      }
+    ]
+  },
+  
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "16.x",
+    "typescript": "^4.9.4"
+  },
+  "dependencies": {
+    "glob": "^8.0.3"
+  }
+}
