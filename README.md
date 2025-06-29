@@ -11,7 +11,7 @@ Una extensión de VS Code que revoluciona la experiencia de desarrollo con Gexti
 - **Repositorios remotos**: Integración directa con GitHub, GitLab y Bitbucket
 - **Cambio rápido**: Alterna entre proyectos con un solo comando
 
-### 🌐 Repositorios Remotos (¡Nuevo!)
+### 🌐 Repositorios Remotos
 - **GitHub/GitLab/Bitbucket**: Agrega repositorios directamente por URL
 - **Ramas específicas**: Trabaja con ramas específicas (16.0, main, develop, etc.)
 - **Subcarpetas**: Especifica subcarpetas dentro del repositorio (addons/, modules/)
@@ -35,7 +35,7 @@ Una extensión de VS Code que revoluciona la experiencia de desarrollo con Gexti
 ## 🚀 Instalación
 
 1. Abre VS Code
-2. Ve a Extensions (Ctrl+Shift+P)
+2. Ve a Extensions (Ctrl+Shift+X)
 3. Busca "Gextia Development Helper"
 4. Haz clic en Install
 
@@ -110,15 +110,33 @@ Rama: main
 
 ## 📋 Comandos Disponibles
 
+### Gestión de Proyectos
 | Comando | Descripción |
 |---------|-------------|
 | `Gextia: Create Project Profile` | Crear un nuevo perfil de proyecto |
 | `Gextia: Switch Project Profile` | Cambiar entre perfiles existentes |
+| `Gextia: Add Path to Current Project` | Agregar ruta de addons al proyecto actual |
+| `Gextia: Add Remote Repository to Current Project` | Agregar repositorio remoto al proyecto actual |
+| `Gextia: Manage Project Paths and Repositories` | Gestionar rutas y repositorios del proyecto |
+
+### Cache y Análisis
+| Comando | Descripción |
+|---------|-------------|
 | `Gextia: Refresh Models Cache` | Actualizar manualmente el caché de modelos |
+| `Gextia: Show Models Cache Statistics` | Ver estadísticas del caché actual |
+| `Gextia: Show Model Inheritance Tree` | Mostrar árbol de herencia de modelos |
+| `Gextia: Go to Model Definition` | Navegar a la definición de un modelo |
+| `Gextia: Show Models Cache Log` | Ver log del caché de modelos |
+| `Gextia: Debug Refresh Models Cache` | Debug del refresco del caché |
+
+### Repositorios Remotos
+| Comando | Descripción |
+|---------|-------------|
 | `Gextia: Sync Remote Repositories` | Sincronizar repositorios remotos |
 | `Gextia: Show Remote Repositories Info` | Ver estado de repositorios remotos |
-| `Gextia: Show Cache Statistics` | Ver estadísticas del caché actual |
-| `Gextia: Show Inheritance Tree` | Mostrar árbol de herencia de modelos |
+| `Gextia: Test Remote Repository Connection` | Probar conexión a repositorio remoto |
+| `Gextia: Show Remote Repositories Sync Log` | Ver log de sincronización |
+| `Gextia: Clear Remote Repositories Sync Log` | Limpiar log de sincronización |
 
 ## 🎯 Casos de Uso Avanzados
 
@@ -178,9 +196,11 @@ class SaleOrder(models.Model):
 
 ```json
 {
+  "gextia-dev-helper.currentProfile": "",
+  "gextia-dev-helper.profiles": {},
+  "gextia-dev-helper.gextiaVersion": "16.0",
   "gextia-dev-helper.enableDebugMode": false,
-  "gextia-dev-helper.autoRefreshOnSave": true,
-  "gextia-dev-helper.gextiaVersion": "16.0"
+  "gextia-dev-helper.autoRefreshOnSave": true
 }
 ```
 
@@ -234,6 +254,11 @@ La extensión excluye automáticamente:
 3. Para repositorios privados, verifica el token de autenticación
 4. Revisa los logs: View > Output > "Gextia Remote Repositories"
 
+### Error HTTP 403 (Forbidden)
+- **Repositorios OCA**: Configura un token de GitHub para evitar rate limits
+- **Repositorios privados**: Verifica que el token tenga permisos `repo`
+- **Repositorios públicos**: Algunos pueden requerir autenticación
+
 ### Rendimiento lento
 1. Verifica la configuración de exclusiones
 2. Considera desactivar `autoRefreshOnSave` para proyectos muy grandes
@@ -263,23 +288,43 @@ La extensión excluye automáticamente:
 - **Repositorios de diferentes fuentes** (GitHub, GitLab, Bitbucket)
 - **Cache inteligente** para trabajar offline
 
+## 🔍 Características Técnicas
+
+### Análisis de Modelos
+- **Parser inteligente**: Analiza archivos Python de Gextia
+- **Detección de herencias**: Identifica `_inherit`, `_name`, y herencias múltiples
+- **Campos y métodos**: Extrae información completa de modelos
+- **Manifests**: Parsea `__manifest__.py` y `__openerp__.py`
+
+### Gestión de Repositorios
+- **Descarga ZIP**: Descarga repositorios como archivos ZIP
+- **Extracción automática**: Extrae y organiza archivos localmente
+- **Sincronización incremental**: Solo descarga cambios necesarios
+- **Manejo de errores**: Reintentos automáticos y logging detallado
+
+### Autocompletado Contextual
+- **Análisis de contexto**: Detecta modelo y método actual
+- **Herencia completa**: Incluye campos y métodos heredados
+- **Navegación**: Ctrl+Click para ir a definiciones
+- **Filtrado inteligente**: Sugerencias relevantes al contexto
+
 ## 🤝 Contribuir
 
 ¿Encontraste un bug o tienes una idea? ¡Contribuye!
 
-1. Fork el repositorio: `https://github.com/tu-usuario/gextia-dev-helper`
+1. Fork el repositorio: `https://github.com/Zarritas/vs-extension`
 2. Crea una rama: `git checkout -b feature/nueva-funcionalidad`
 3. Commit: `git commit -am 'Agregar soporte para X'`
 4. Push: `git push origin feature/nueva-funcionalidad`
 5. Abre un Pull Request
 
 ### Roadmap
-- [ ] Descarga real de repositorios ZIP
 - [ ] Interfaz gráfica para gestión de repositorios  
 - [ ] Notificaciones de actualizaciones disponibles
 - [ ] Soporte para más proveedores Git
 - [ ] Análisis de dependencias entre módulos
 - [ ] Generador de snippets personalizados
+- [ ] Integración con Gextia Studio
 
 ## 📄 Licencia
 
@@ -305,9 +350,9 @@ MIT License - ver [LICENSE](LICENSE) para más detalles.
 
 ## 📞 Soporte y Comunidad
 
-- 🐛 [Reportar bugs](https://github.com/tu-usuario/gextia-dev-helper/issues)
-- 💡 [Solicitar features](https://github.com/tu-usuario/gextia-dev-helper/discussions)
-- 📖 [Documentación completa](https://github.com/tu-usuario/gextia-dev-helper/wiki)
+- 🐛 [Reportar bugs](https://github.com/Zarritas/vs-extension/issues)
+- 💡 [Solicitar features](https://github.com/Zarritas/vs-extension/discussions)
+- 📖 [Documentación completa](https://github.com/Zarritas/vs-extension/wiki)
 - 💬 [Únete a Discord](https://discord.gg/gextia-dev-helper)
 - 📧 Email: support@gextia-dev-helper.com
 
