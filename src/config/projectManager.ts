@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { GextiaProjectProfile } from '../types';
+import { GextiaProjectProfile, RemoteRepository } from '../types';
+import { RemoteRepositoryManager } from '../remote/remoteRepositoryManager';
 
 export class ProjectManager {
     private static instance: ProjectManager;
@@ -91,8 +92,7 @@ export class ProjectManager {
         const paths = {
             addonsPath: [] as string[],
             gextiaPath: undefined as string | undefined,
-            enterprisePath: undefined as string | undefined,
-            communityPath: undefined as string | undefined
+            remoteRepositories: [] as RemoteRepository[],
         };
         
         // Paso 1: Detectar automáticamente carpetas de addons
@@ -113,6 +113,7 @@ export class ProjectManager {
         while (configuring) {
             const options = [
                 'Agregar ruta de addons personalizados',
+                'Agregar repositorio remoto (GitHub/GitLab)',
                 'Configurar ruta de Gextia Core',
                 'Ver rutas configuradas',
                 'Finalizar configuración'
@@ -126,7 +127,11 @@ export class ProjectManager {
                 case 'Agregar ruta de addons personalizados':
                     await this.configureCustomAddonsPath(paths);
                     break;
-                
+
+                case 'Agregar repositorio remoto (GitHub/GitLab)':
+                    await this.configureRemoteRepository(paths);
+                    break;
+
                 case 'Configurar ruta de Gextia Core':
                     await this.configureGextiaCorePath(paths);
                     break;
@@ -149,6 +154,35 @@ export class ProjectManager {
 
         return paths;
     }
+
+    /**
+     * Configura un repositorio remoto
+     */
+    private async configureRemoteRepository(paths: any): Promise<void> {
+        const remoteManager = RemoteRepositoryManager.getInstance();
+        
+        const repository = await remoteManager.configureRemoteRepository();
+        if (repository) {
+            paths.remoteRepositories.push(repository);
+            
+            // Preguntar si sincronizar ahora
+            const syncNow = await vscode.window.showQuickPick(['Sí', 'No'], {
+                placeHolder: '¿Sincronizar repositorio ahora? (puede tardar unos minutos)'
+            });
+            
+            if (syncNow === 'Sí') {
+                vscode.window.showInformationMessage('Sincronizando repositorio...');
+                const success = await remoteManager.syncRepository(repository);
+                
+                if (success) {
+                    vscode.window.showInformationMessage(`Repositorio "${repository.name}" sincronizado exitosamente`);
+                } else {
+                    vscode.window.showWarningMessage(`Error sincronizando repositorio "${repository.name}"`);
+                }
+            }
+        }
+    }
+
 
     /**
      * Configura ruta de addons personalizados
