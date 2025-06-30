@@ -51,6 +51,11 @@
         "category": "Gextia"
       },
       {
+        "command": "gextia-dev-helper.deleteProfile",
+        "title": "Delete Gextia Project Profile",
+        "category": "Gextia"
+      },
+      {
         "command": "gextia-dev-helper.refreshModels",
         "title": "Refresh Gextia Models Cache",
         "category": "Gextia"

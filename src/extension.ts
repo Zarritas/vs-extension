@@ -694,6 +694,132 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
+    const deleteProfileCommand = vscode.commands.registerCommand(
+        'gextia-dev-helper.deleteProfile',
+        () => projectManager.deleteProfile()
+    );
+
+    // Registrar los comandos en el contexto
+    context.subscriptions.push(
+        createProfileCommand,
+        switchProfileCommand,
+        refreshModelsCommand,
+        deleteProfileCommand
+    );
+
+    // Comando para abrir la ventana visual (Webview)
+    const openGextiaManagerCommand = vscode.commands.registerCommand(
+        'gextia-dev-helper.openGextiaManager',
+        () => {
+            const panel = vscode.window.createWebviewPanel(
+                'gextiaManager',
+                'Gestor Gextia',
+                vscode.ViewColumn.One,
+                { enableScripts: true }
+            );
+
+            function updateWebview() {
+                const projectManager = ProjectManager.getInstance();
+                const modelsCache = ModelsCache.getInstance();
+                const rutas = projectManager.getAllModelsPaths();
+                const modelos = modelsCache.getAllModelNames();
+                const componentes = modelsCache.getAllComponentNames();
+                panel.webview.html = `
+                    <html>
+                    <head>
+                        <style>
+                            body { font-family: sans-serif; margin: 0; padding: 0; }
+                            .grupo { margin: 20px; padding: 16px; border-radius: 8px; background: #f3f3f3; }
+                            h2 { margin-top: 0; }
+                            ul { padding-left: 20px; }
+                            button { margin: 4px 8px 4px 0; }
+                            .item-link { color: #007acc; cursor: pointer; text-decoration: underline; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="grupo">
+                            <h2>Rutas</h2>
+                            <ul>${rutas.map(r => `<li>${r}</li>`).join('')}</ul>
+                            <button onclick="vscode.postMessage({ command: 'addRuta' })">Agregar Ruta</button>
+                            <button onclick="vscode.postMessage({ command: 'refreshRutas' })">Refrescar Rutas</button>
+                        </div>
+                        <div class="grupo">
+                            <h2>Modelos</h2>
+                            <ul>${modelos.map(m => `<li><span class='item-link' onclick=\"vscode.postMessage({command:'showModel', name:'${m}'})\">${m}</span></li>`).join('')}</ul>
+                            <button onclick="vscode.postMessage({ command: 'refreshModels' })">Refrescar Modelos</button>
+                        </div>
+                        <div class="grupo">
+                            <h2>Componentes</h2>
+                            <ul>${componentes.map(c => `<li><span class='item-link' onclick=\"vscode.postMessage({command:'showComponent', name:'${c}'})\">${c}</span></li>`).join('')}</ul>
+                            <button onclick="vscode.postMessage({ command: 'refreshComponents' })">Refrescar Componentes</button>
+                        </div>
+                        <div class="grupo">
+                            <h2>Acciones</h2>
+                            <button onclick="vscode.postMessage({ command: 'refreshAll' })">Refrescar Todo</button>
+                            <button onclick="vscode.postMessage({ command: 'openSettings' })">Configuración</button>
+                        </div>
+                        <script>
+                            const vscode = acquireVsCodeApi();
+                            window.addEventListener('message', event => {
+                                // Aquí puedes manejar mensajes desde la extensión
+                            });
+                        </script>
+                    </body>
+                    </html>
+                `;
+            }
+
+            updateWebview();
+
+            panel.webview.onDidReceiveMessage(async message => {
+                const modelsCache = ModelsCache.getInstance();
+                const projectManager = ProjectManager.getInstance();
+                if (message.command === 'refreshModels') {
+                    await modelsCache.refreshCache();
+                    vscode.window.showInformationMessage('Modelos actualizados');
+                    updateWebview();
+                } else if (message.command === 'refreshComponents') {
+                    await modelsCache.refreshCache();
+                    vscode.window.showInformationMessage('Componentes actualizados');
+                    updateWebview();
+                } else if (message.command === 'refreshAll') {
+                    await modelsCache.refreshCache();
+                    vscode.window.showInformationMessage('Todo actualizado');
+                    updateWebview();
+                } else if (message.command === 'refreshRutas') {
+                    // Solo refrescar rutas (en este caso, recargar la vista)
+                    updateWebview();
+                } else if (message.command === 'addRuta') {
+                    vscode.commands.executeCommand('gextia-dev-helper.addProjectPath');
+                } else if (message.command === 'openSettings') {
+                    vscode.commands.executeCommand('workbench.action.openSettings', 'gextia-dev-helper');
+                } else if (message.command === 'showModel' && message.name) {
+                    const modelos = modelsCache.getModels(message.name);
+                    if (modelos.length > 0) {
+                        const model = modelos[0];
+                        vscode.window.showInformationMessage(
+                            `Modelo: ${model.name}\nArchivo: ${model.filePath}\nClase: ${model.className}\nCampos: ${model.fields.length}\nMétodos: ${model.methods.length}`
+                        );
+                    } else {
+                        vscode.window.showWarningMessage('No se encontró información del modelo.');
+                    }
+                } else if (message.command === 'showComponent' && message.name) {
+                    const componentes = modelsCache.getComponent(message.name);
+                    if (componentes.length > 0) {
+                        const comp = componentes[0];
+                        vscode.window.showInformationMessage(
+                            `Componente: ${comp.name}\nArchivo: ${comp.filePath}\nClase: ${comp.className}\nCampos: ${comp.fields.length}\nMétodos: ${comp.methods.length}`
+                        );
+                    } else {
+                        vscode.window.showWarningMessage('No se encontró información del componente.');
+                    }
+                }
+            });
+        }
+    );
+
+    context.subscriptions.push(openGextiaManagerCommand);
+
     // Funciones auxiliares para manageProjectPaths
     async function removeAddonsPath(projectManager: ProjectManager, profile: any): Promise<void> {
         if (profile.paths.addonsPath.length === 0) {

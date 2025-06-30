@@ -3,16 +3,16 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { GextiaProjectProfile, RemoteRepository } from '../types';
 import { RemoteRepositoryManager } from '../remote/remoteRepositoryManager';
+import { ProfileManager } from './profileManager';
 
 export class ProjectManager {
     private static instance: ProjectManager;
-    private currentProfile: GextiaProjectProfile | null = null;
-    private profiles: Map<string, GextiaProjectProfile> = new Map();
+    private profileManager: ProfileManager;
     private outputChannel: vscode.OutputChannel;
 
     private constructor() {
         this.outputChannel = vscode.window.createOutputChannel('Gextia Dev Helper');
-        this.loadProfiles();
+        this.profileManager = new ProfileManager();
     }
 
     public static getInstance(): ProjectManager {
@@ -66,10 +66,8 @@ export class ProjectManager {
                 ]
             };
 
-            // Guardar perfil
-            this.profiles.set(profileName, profile);
-            await this.saveProfiles();
-            await this.setCurrentProfile(profileName);
+            // Guardar perfil usando ProfileManager
+            await this.profileManager.createProfile(profile);
 
             vscode.window.showInformationMessage(`Perfil "${profileName}" creado exitosamente`);
 
@@ -380,42 +378,23 @@ export class ProjectManager {
      * Cambia el perfil activo
      */
     public async switchProfile(): Promise<void> {
-        const profileNames = Array.from(this.profiles.keys());
-        
+        const profileNames = this.profileManager.getProfileNames();
         if (profileNames.length === 0) {
             const create = await vscode.window.showInformationMessage(
                 'No hay perfiles configurados. ¿Crear uno nuevo?',
                 'Crear perfil'
             );
-            
             if (create) {
                 await this.createProfile();
             }
-            {return;}
+            return;
         }
-
         const selectedProfile = await vscode.window.showQuickPick(profileNames, {
             placeHolder: 'Selecciona un perfil de proyecto'
         });
-
         if (selectedProfile) {
-            await this.setCurrentProfile(selectedProfile);
+            await this.profileManager.setCurrentProfile(selectedProfile);
             vscode.window.showInformationMessage(`Perfil activo: ${selectedProfile}`);
-        }
-    }
-
-    /**
-     * Establece el perfil actual
-     */
-    private async setCurrentProfile(profileName: string): Promise<void> {
-        const profile = this.profiles.get(profileName);
-        if (profile) {
-            this.currentProfile = profile;
-            const config = vscode.workspace.getConfiguration('gextia-dev-helper');
-            await config.update('currentProfile', profileName, vscode.ConfigurationTarget.Global);
-            
-            // Actualizar versión de Gextia
-            await config.update('gextiaVersion', profile.gextiaVersion, vscode.ConfigurationTarget.Workspace);
         }
     }
 
@@ -423,7 +402,7 @@ export class ProjectManager {
      * Obtiene el perfil actual
      */
     public getCurrentProfile(): GextiaProjectProfile | null {
-        return this.currentProfile;
+        return this.profileManager.getCurrentProfile();
     }
 
     /**
@@ -448,7 +427,7 @@ export class ProjectManager {
      * Obtiene todas las rutas de addons del perfil actual
      */
     public getAllAddonsPaths(): string[] {
-        if (!this.currentProfile) {
+        if (!this.getCurrentProfile()) {
             this.log('No hay perfil activo, retornando rutas vacías');
             return [];
         }
@@ -457,9 +436,9 @@ export class ProjectManager {
         const allPaths: string[] = [];
         
         // Agregar rutas de addons personalizados
-        if (this.currentProfile.paths.addonsPath) {
-            this.log(`Rutas de addons personalizados: ${this.currentProfile.paths.addonsPath.length}`);
-            this.currentProfile.paths.addonsPath.forEach((path, index) => {
+        if (this.getCurrentProfile()!.paths.addonsPath) {
+            this.log(`Rutas de addons personalizados: ${this.getCurrentProfile()!.paths.addonsPath.length}`);
+            this.getCurrentProfile()!.paths.addonsPath.forEach((path, index) => {
                 this.log(`  ${index + 1}. ${path}`);
                 allPaths.push(path);
             });
@@ -468,18 +447,17 @@ export class ProjectManager {
         }
         
         // Agregar rutas de repositorios remotos sincronizados
-        if (this.currentProfile.paths.remoteRepositories) {
-            this.log(`Repositorios remotos configurados: ${this.currentProfile.paths.remoteRepositories.length}`);
-            const remoteManager = RemoteRepositoryManager.getInstance();
-            
-            for (const repo of this.currentProfile.paths.remoteRepositories) {
+        const currentProfile = this.getCurrentProfile();
+        if (currentProfile && currentProfile.paths.remoteRepositories && currentProfile.paths.remoteRepositories.length > 0) {
+            this.log(`Repositorios remotos configurados: ${currentProfile.paths.remoteRepositories.length}`);
+            for (const repo of currentProfile.paths.remoteRepositories) {
                 this.log(`\n--- Repositorio: ${repo.name} ---`);
                 this.log(`  URL: ${repo.url}`);
                 this.log(`  Habilitado: ${repo.enabled ? 'Sí' : 'No'}`);
                 this.log(`  Ruta local: ${repo.localCachePath || 'No configurada'}`);
                 
                 if (repo.enabled && repo.localCachePath) {
-                    const localPath = remoteManager.getLocalPath(repo);
+                    const localPath = repo.localCachePath;
                     this.log(`  Ruta final calculada: ${localPath || 'No disponible'}`);
                     
                     if (localPath && fs.existsSync(localPath)) {
@@ -497,8 +475,9 @@ export class ProjectManager {
         }
         
         // Agregar ruta de addons de Gextia Core
-        if (this.currentProfile.paths.gextiaPath) {
-            const coreAddonsPath = path.join(this.currentProfile.paths.gextiaPath, 'addons');
+        const currentProfileForCore = this.getCurrentProfile();
+        if (currentProfileForCore && currentProfileForCore.paths.gextiaPath) {
+            const coreAddonsPath = path.join(currentProfileForCore.paths.gextiaPath, 'addons');
             this.log(`Ruta de addons de Gextia Core: ${coreAddonsPath}`);
             allPaths.push(coreAddonsPath);
         } else {
@@ -517,48 +496,37 @@ export class ProjectManager {
      * Obtiene la ruta del código core de Gextia (para modelos base)
      */
     public getGextiaCorePath(): string | null {
-        if (!this.currentProfile?.paths.gextiaPath) {return null;}
-        return path.join(this.currentProfile.paths.gextiaPath, 'gextia');
+        const currentProfile = this.getCurrentProfile();
+        if (!currentProfile?.paths.gextiaPath) {return null;}
+        return path.join(currentProfile.paths.gextiaPath, 'gextia');
+    }
+
+    /**
+     * Configura el perfil actual
+     */
+    public async setCurrentProfile(profileName: string): Promise<void> {
+        await this.profileManager.setCurrentProfile(profileName);
     }
 
     /**
      * Carga los perfiles desde la configuración
      */
     private loadProfiles(): void {
-        const config = vscode.workspace.getConfiguration('gextia-dev-helper');
-        const savedProfiles = config.get<any>('profiles', {});
-        const currentProfileName = config.get<string>('currentProfile', '');
-
-        this.profiles.clear();
-        
-        for (const [name, profile] of Object.entries(savedProfiles)) {
-            this.profiles.set(name, profile as GextiaProjectProfile);
-        }
-
-        if (currentProfileName && this.profiles.has(currentProfileName)) {
-            this.currentProfile = this.profiles.get(currentProfileName) || null;
-        }
+        this.profileManager.loadProfiles();
     }
 
     /**
      * Guarda los perfiles en la configuración
      */
     private async saveProfiles(): Promise<void> {
-        const config = vscode.workspace.getConfiguration('gextia-dev-helper');
-        const profilesObj: any = {};
-        
-        this.profiles.forEach((profile, name) => {
-            profilesObj[name] = profile;
-        });
-
-        await config.update('profiles', profilesObj, vscode.ConfigurationTarget.Global);
+        await this.profileManager.saveProfiles();
     }
 
     /**
      * Verifica si hay un perfil configurado
      */
     public hasActiveProfile(): boolean {
-        return this.currentProfile !== null;
+        return this.profileManager.hasActiveProfile();
     }
 
     /**
@@ -581,7 +549,7 @@ export class ProjectManager {
      * Agrega una nueva ruta de addons al proyecto actual
      */
     public async addAddonsPath(addonsPath: string): Promise<boolean> {
-        if (!this.currentProfile) {
+        if (!this.getCurrentProfile()) {
             vscode.window.showWarningMessage('No hay un perfil activo. Crea uno primero.');
             return false;
         }
@@ -594,13 +562,13 @@ export class ProjectManager {
             }
 
             // Verificar que no esté ya agregada
-            if (this.currentProfile.paths.addonsPath.includes(addonsPath)) {
+            if (this.getCurrentProfile()!.paths.addonsPath.includes(addonsPath)) {
                 vscode.window.showInformationMessage('Esta ruta ya está agregada al proyecto.');
                 return false;
             }
 
             // Agregar la ruta
-            this.currentProfile.paths.addonsPath.push(addonsPath);
+            this.getCurrentProfile()!.paths.addonsPath.push(addonsPath);
             await this.saveProfiles();
 
             this.log(`Addons path added: ${addonsPath}`);
@@ -619,36 +587,27 @@ export class ProjectManager {
      * Agrega un nuevo repositorio remoto al proyecto actual
      */
     public async addRemoteRepository(repository: RemoteRepository): Promise<boolean> {
-        if (!this.currentProfile) {
+        const currentProfile = this.getCurrentProfile();
+        if (!currentProfile) {
             vscode.window.showWarningMessage('No hay un perfil activo. Crea uno primero.');
             return false;
         }
-
         try {
-            // Verificar que no esté ya agregado
-            const existingRepo = this.currentProfile.paths.remoteRepositories?.find(
+            if (!currentProfile.paths.remoteRepositories) {
+                currentProfile.paths.remoteRepositories = [];
+            }
+            const existingRepo = currentProfile.paths.remoteRepositories.find(
                 repo => repo.name === repository.name || repo.url === repository.url
             );
-
             if (existingRepo) {
                 vscode.window.showInformationMessage('Este repositorio ya está agregado al proyecto.');
                 return false;
             }
-
-            // Inicializar array si no existe
-            if (!this.currentProfile.paths.remoteRepositories) {
-                this.currentProfile.paths.remoteRepositories = [];
-            }
-
-            // Agregar el repositorio
-            this.currentProfile.paths.remoteRepositories.push(repository);
-            await this.saveProfiles();
-
+            currentProfile.paths.remoteRepositories.push(repository);
+            await this.profileManager.saveProfiles();
             this.log(`Remote repository added: ${repository.name}`);
             vscode.window.showInformationMessage(`Repositorio agregado: ${repository.name}`);
-
             return true;
-
         } catch (error) {
             this.log(`Error adding remote repository: ${error}`);
             vscode.window.showErrorMessage(`Error agregando repositorio: ${error}`);
@@ -660,19 +619,19 @@ export class ProjectManager {
      * Remueve una ruta de addons del proyecto actual
      */
     public async removeAddonsPath(addonsPath: string): Promise<boolean> {
-        if (!this.currentProfile) {
+        if (!this.getCurrentProfile()) {
             vscode.window.showWarningMessage('No hay un perfil activo.');
             return false;
         }
 
         try {
-            const index = this.currentProfile.paths.addonsPath.indexOf(addonsPath);
+            const index = this.getCurrentProfile()!.paths.addonsPath.indexOf(addonsPath);
             if (index === -1) {
                 vscode.window.showWarningMessage('Esta ruta no está en el proyecto.');
                 return false;
             }
 
-            this.currentProfile.paths.addonsPath.splice(index, 1);
+            this.getCurrentProfile()!.paths.addonsPath.splice(index, 1);
             await this.saveProfiles();
 
             this.log(`Addons path removed: ${addonsPath}`);
@@ -691,29 +650,24 @@ export class ProjectManager {
      * Remueve un repositorio remoto del proyecto actual
      */
     public async removeRemoteRepository(repositoryName: string): Promise<boolean> {
-        if (!this.currentProfile || !this.currentProfile.paths.remoteRepositories) {
+        const currentProfile = this.getCurrentProfile();
+        if (!currentProfile || !currentProfile.paths.remoteRepositories) {
             vscode.window.showWarningMessage('No hay repositorios configurados.');
             return false;
         }
-
         try {
-            const index = this.currentProfile.paths.remoteRepositories.findIndex(
+            const index = currentProfile.paths.remoteRepositories.findIndex(
                 repo => repo.name === repositoryName
             );
-
             if (index === -1) {
                 vscode.window.showWarningMessage('Este repositorio no está en el proyecto.');
                 return false;
             }
-
-            const removedRepo = this.currentProfile.paths.remoteRepositories.splice(index, 1)[0];
-            await this.saveProfiles();
-
+            const removedRepo = currentProfile.paths.remoteRepositories.splice(index, 1)[0];
+            await this.profileManager.saveProfiles();
             this.log(`Remote repository removed: ${removedRepo.name}`);
             vscode.window.showInformationMessage(`Repositorio removido: ${removedRepo.name}`);
-
             return true;
-
         } catch (error) {
             this.log(`Error removing remote repository: ${error}`);
             vscode.window.showErrorMessage(`Error removiendo repositorio: ${error}`);
@@ -725,23 +679,24 @@ export class ProjectManager {
      * Muestra información detallada del proyecto actual
      */
     public showProjectInfo(): void {
-        if (!this.currentProfile) {
+        const currentProfile = this.getCurrentProfile();
+        if (!currentProfile) {
             vscode.window.showWarningMessage('No hay un perfil activo.');
             return;
         }
 
-        let message = `**Proyecto: ${this.currentProfile.name}**\n\n`;
+        let message = `**Proyecto: ${currentProfile.name}**\n\n`;
         
-        if (this.currentProfile.description) {
-            message += `📝 Descripción: ${this.currentProfile.description}\n\n`;
+        if (currentProfile.description) {
+            message += `📝 Descripción: ${currentProfile.description}\n\n`;
         }
 
-        message += `🏷️ Versión Gextia: ${this.currentProfile.gextiaVersion}\n\n`;
+        message += `🏷️ Versión Gextia: ${currentProfile.gextiaVersion}\n\n`;
 
         // Rutas de addons
-        message += `📁 **Rutas de Addons (${this.currentProfile.paths.addonsPath.length})**\n`;
-        if (this.currentProfile.paths.addonsPath.length > 0) {
-            for (const addonsPath of this.currentProfile.paths.addonsPath) {
+        message += `📁 **Rutas de Addons (${currentProfile.paths.addonsPath.length})**\n`;
+        if (currentProfile.paths.addonsPath.length > 0) {
+            for (const addonsPath of currentProfile.paths.addonsPath) {
                 message += `   • ${addonsPath}\n`;
             }
         } else {
@@ -750,9 +705,9 @@ export class ProjectManager {
         message += '\n';
 
         // Repositorios remotos
-        message += `🌐 **Repositorios Remotos (${this.currentProfile.paths.remoteRepositories?.length || 0})**\n`;
-        if (this.currentProfile.paths.remoteRepositories && this.currentProfile.paths.remoteRepositories.length > 0) {
-            for (const repo of this.currentProfile.paths.remoteRepositories) {
+        message += `🌐 **Repositorios Remotos (${currentProfile.paths.remoteRepositories?.length || 0})**\n`;
+        if (currentProfile.paths.remoteRepositories && currentProfile.paths.remoteRepositories.length > 0) {
+            for (const repo of currentProfile.paths.remoteRepositories) {
                 const status = repo.enabled ? '✅' : '❌';
                 message += `   ${status} ${repo.name}\n`;
                 message += `      URL: ${repo.url}\n`;
@@ -767,5 +722,36 @@ export class ProjectManager {
         }
 
         vscode.window.showInformationMessage(message);
+    }
+
+    /**
+     * Borra un perfil de proyecto existente
+     */
+    public async deleteProfile(): Promise<void> {
+        try {
+            const profileNames = this.profileManager.getProfileNames();
+            if (profileNames.length === 0) {
+                vscode.window.showWarningMessage('No hay perfiles de proyecto para borrar');
+                return;
+            }
+            const selectedProfile = await vscode.window.showQuickPick(profileNames, {
+                placeHolder: 'Selecciona el perfil que deseas borrar'
+            });
+            if (!selectedProfile) {
+                return;
+            }
+            const confirmation = await vscode.window.showWarningMessage(
+                `¿Estás seguro de que deseas borrar el perfil "${selectedProfile}"?`,
+                'Sí', 'No'
+            );
+            if (confirmation !== 'Sí') {
+                return;
+            }
+            await this.profileManager.deleteProfile(selectedProfile);
+            vscode.window.showInformationMessage(`Perfil "${selectedProfile}" borrado exitosamente`);
+        } catch (error) {
+            this.outputChannel.appendLine(`Error deleting profile: ${error}`);
+            vscode.window.showErrorMessage('Error al borrar el perfil');
+        }
     }
 }

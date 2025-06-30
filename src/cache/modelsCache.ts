@@ -8,6 +8,7 @@ import { ProjectManager } from '../config/projectManager';
 export class ModelsCache {
     private static instance: ModelsCache;
     private cache: Map<string, GextiaModel[]> = new Map(); // ModelName -> GextiaModel[]
+    private componentsCache: Map<string, GextiaModel[]> = new Map(); // ComponentName -> GextiaModel[]
     private fileModificationTimes: Map<string, number> = new Map(); // FilePath -> LastModificationTime
     private isInitialized: boolean = false;
     private isRefreshing: boolean = false;
@@ -67,70 +68,56 @@ export class ModelsCache {
             this.log('Cache refresh already in progress');
             return;
         }
-
         this.isRefreshing = true;
         this.log('=== INICIANDO REFRESH DEL CACHE ===');
-
         try {
             // Limpiar caché actual
             this.cache.clear();
+            this.componentsCache.clear();
             this.fileModificationTimes.clear();
-
             const projectManager = ProjectManager.getInstance();
             const modelParser = ModelParser.getInstance();
             const allPaths = projectManager.getAllModelsPaths();
-
             this.log(`Total de rutas a analizar: ${allPaths.length}`);
             this.log('Rutas encontradas:');
             allPaths.forEach((path, index) => {
                 this.log(`  ${index + 1}. ${path} ${fs.existsSync(path) ? '✅' : '❌'}`);
             });
-
-            // Parsear modelos en cada ruta
+            // Parsear modelos y componentes en cada ruta
             for (const modelPath of allPaths) {
                 this.log(`\n--- Analizando ruta: ${modelPath} ---`);
-                
                 if (!fs.existsSync(modelPath)) {
                     this.log(`⚠️  Ruta no existe, saltando: ${modelPath}`);
                     continue;
                 }
-                
                 try {
                     const pathModels = await modelParser.parseModelsInPath(modelPath);
                     this.log(`📊 Modelos encontrados en esta ruta: ${pathModels.size}`);
-                    
-                    // Mostrar algunos modelos encontrados para debugging
-                    let modelCount = 0;
-                    for (const [modelName, models] of pathModels) {
-                        if (modelCount < 5) { // Solo mostrar los primeros 5 para no saturar el log
-                            this.log(`  - ${modelName}: ${models.length} definiciones`);
-                        }
-                        modelCount++;
-                    }
-                    if (modelCount > 5) {
-                        this.log(`  ... y ${modelCount - 5} modelos más`);
-                    }
-                    
                     // Merge con el caché existente
                     for (const [modelName, models] of pathModels) {
-                        if (!this.cache.has(modelName)) {
-                            this.cache.set(modelName, []);
+                        // Si es un componente, guardar en componentsCache
+                        if (models.length > 0 && models[0].modelType === 'component') {
+                            if (!this.componentsCache.has(modelName)) {
+                                this.componentsCache.set(modelName, []);
+                            }
+                            this.componentsCache.get(modelName)!.push(...models);
+                        } else {
+                            if (!this.cache.has(modelName)) {
+                                this.cache.set(modelName, []);
+                            }
+                            this.cache.get(modelName)!.push(...models);
                         }
-                        this.cache.get(modelName)!.push(...models);
                     }
-
                     // Actualizar tiempos de modificación
                     await this.updateFileModificationTimes(modelPath);
-                    
                 } catch (error) {
                     this.log(`❌ Error analizando modelos en ${modelPath}: ${error}`);
                 }
             }
-
             this.log(`\n=== CACHE REFRESH COMPLETADO ===`);
             this.log(`📈 Total de modelos cargados: ${this.getTotalModelsCount()}`);
             this.log(`📊 Tipos únicos de modelos: ${this.cache.size}`);
-            
+            this.log(`📊 Tipos únicos de componentes: ${this.componentsCache.size}`);
         } catch (error) {
             this.log(`❌ Error refrescando cache: ${error}`);
             throw error;
@@ -337,55 +324,57 @@ export class ModelsCache {
      * Obtiene todos los modelos de un nombre específico
      */
     public getModels(modelName: string): GextiaModel[] {
+        // Buscar primero en Gextia Core
+        const projectManager = require('../config/projectManager').ProjectManager.getInstance();
+        const corePath = projectManager.getGextiaCorePath && projectManager.getGextiaCorePath();
+        if (corePath) {
+            for (const [name, models] of this.cache.entries()) {
+                if (name === modelName) {
+                    // Filtrar modelos cuyo filePath comience con el corePath
+                    const coreModels = models.filter(m => m.filePath && m.filePath.startsWith(corePath));
+                    if (coreModels.length > 0) {
+                        return coreModels;
+                    }
+                }
+            }
+        }
+        // Si no se encontró en core, buscar en el resto
         return this.cache.get(modelName) || [];
     }
 
     /**
-     * Obtiene todos los modelos que heredan de un modelo específico
+     * Obtiene todos los componentes de un nombre específico
      */
-    public getInheritingModels(modelName: string): GextiaModel[] {
-        const inheriting: GextiaModel[] = [];
-        
-        for (const models of this.cache.values()) {
-            for (const model of models) {
-                if (model.isInherit && model.inheritFrom === modelName) {
-                    inheriting.push(model);
-                }
-            }
-        }
-        
-        return inheriting;
+    public getComponent(componentName: string): GextiaModel[] {
+        return this.componentsCache.get(componentName) || [];
     }
 
     /**
-     * Obtiene todos los campos disponibles para un modelo (incluye herencia)
+     * Obtiene todos los nombres de modelos disponibles
      */
-    public getAllFieldsForModel(modelName: string): Map<string, GextiaField[]> {
-        const allFields = new Map<string, GextiaField[]>();
-        
-        // Obtener campos del modelo base
-        const baseModels = this.getModels(modelName);
-        for (const model of baseModels) {
-            for (const field of model.fields) {
-                if (!allFields.has(field.name)) {
-                    allFields.set(field.name, []);
-                }
-                allFields.get(field.name)!.push(field);
-            }
-        }
-        
-        // Obtener campos de modelos que heredan
-        const inheritingModels = this.getInheritingModels(modelName);
-        for (const model of inheritingModels) {
-            for (const field of model.fields) {
-                if (!allFields.has(field.name)) {
-                    allFields.set(field.name, []);
-                }
-                allFields.get(field.name)!.push(field);
-            }
-        }
-        
-        return allFields;
+    public getAllModelNames(): string[] {
+        return Array.from(this.cache.keys()).sort();
+    }
+
+    /**
+     * Obtiene todos los nombres de componentes disponibles
+     */
+    public getAllComponentNames(): string[] {
+        return Array.from(this.componentsCache.keys()).sort();
+    }
+
+    /**
+     * Obtiene todos los modelos disponibles como Map
+     */
+    public getAllModelsMap(): Map<string, GextiaModel[]> {
+        return new Map(this.cache);
+    }
+
+    /**
+     * Obtiene todos los componentes disponibles como Map
+     */
+    public getAllComponentsMap(): Map<string, GextiaModel[]> {
+        return new Map(this.componentsCache);
     }
 
     /**
@@ -420,10 +409,51 @@ export class ModelsCache {
     }
 
     /**
-     * Obtiene todos los nombres de modelos disponibles
+     * Obtiene todos los campos disponibles para un modelo (incluye herencia)
      */
-    public getAllModelNames(): string[] {
-        return Array.from(this.cache.keys()).sort();
+    public getAllFieldsForModel(modelName: string): Map<string, GextiaField[]> {
+        const allFields = new Map<string, GextiaField[]>();
+        
+        // Obtener campos del modelo base
+        const baseModels = this.getModels(modelName);
+        for (const model of baseModels) {
+            for (const field of model.fields) {
+                if (!allFields.has(field.name)) {
+                    allFields.set(field.name, []);
+                }
+                allFields.get(field.name)!.push(field);
+            }
+        }
+        
+        // Obtener campos de modelos que heredan
+        const inheritingModels = this.getInheritingModels(modelName);
+        for (const model of inheritingModels) {
+            for (const field of model.fields) {
+                if (!allFields.has(field.name)) {
+                    allFields.set(field.name, []);
+                }
+                allFields.get(field.name)!.push(field);
+            }
+        }
+        
+        return allFields;
+    }
+
+    /**
+     * Obtiene todos los modelos que heredan de un modelo específico
+     */
+    public getInheritingModels(modelName: string): GextiaModel[] {
+        const inheriting: GextiaModel[] = [];
+        
+        for (const models of this.cache.values()) {
+            for (const model of models) {
+                if (model.isInherit && model.inheritFrom === modelName) {
+                    inheriting.push(model);
+                }
+            }
+        }
+        
+        return inheriting;
     }
 
     /**
@@ -462,6 +492,7 @@ export class ModelsCache {
      */
     public clearCache(): void {
         this.cache.clear();
+        this.componentsCache.clear();
         this.fileModificationTimes.clear();
         this.isInitialized = false;
         this.log('Cache cleared');
@@ -481,12 +512,5 @@ export class ModelsCache {
         if (vscode.workspace.getConfiguration('gextia-dev-helper').get('enableDebugMode')) {
             console.log(logMessage);
         }
-    }
-
-    /**
-     * Obtiene todos los modelos disponibles como Map
-     */
-    public getAllModelsMap(): Map<string, GextiaModel[]> {
-        return new Map(this.cache);
     }
 }

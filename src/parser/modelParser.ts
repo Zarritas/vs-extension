@@ -327,7 +327,6 @@ export class ModelParser {
             // Encontrar el final de la clase
             const classIndent = this.getIndentLevel(lines[startLine]);
             let endLine = startLine + 1;
-            
             while (endLine < lines.length) {
                 const line = lines[endLine];
                 if (line.trim() && this.getIndentLevel(line) <= classIndent) {
@@ -335,21 +334,32 @@ export class ModelParser {
                 }
                 endLine++;
             }
-            
             // Extraer información del modelo
             const classContent = lines.slice(startLine, endLine);
             const modelName = this.extractModelName(classContent);
             const inheritFrom = this.extractInheritFrom(classContent);
             const isInherit = inheritFrom !== undefined && !modelName;
-            
+
+            // Detectar si es abstracto por _name = False o _abstract = True
+            let isAbstract = false;
+            for (const line of classContent) {
+                if (line.match(/_name\s*=\s*False/)) {
+                    isAbstract = true;
+                }
+                if (line.match(/_abstract\s*=\s*True/)) {
+                    isAbstract = true;
+                }
+            }
+            // Si el tipo ya es abstract_model, forzar isAbstract
+            if (modelType === 'abstract_model') {
+                isAbstract = true;
+            }
             // Si no tiene _name ni _inherit, no es un modelo válido
             if (!modelName && !inheritFrom) {
                 return null;
             }
-            
             const fields = this.extractFields(classContent, startLine);
             const methods = this.extractMethods(classContent, startLine);
-            
             const model: GextiaModel = {
                 name: modelName || inheritFrom || 'unknown',
                 className,
@@ -361,25 +371,25 @@ export class ModelParser {
                 methods,
                 dependencies: manifest?.depends || [],
                 lineNumber: startLine + 1,
-                modelType
+                modelType: isAbstract ? 'abstract_model' : modelType
             };
-            
             return model;
-            
         } catch (error) {
             this.log(`Error parsing model class ${className}: ${error}`);
             return null;
         }
     }
 
-    /**
-     * Extrae el nombre del modelo (_name)
-     */
+    // Mejorar extractModelName para soportar _name = False
     private extractModelName(classContent: string[]): string | null {
         for (const line of classContent) {
             const match = line.match(/_name\s*=\s*['"]([^'"]+)['"]/);
             if (match) {
                 return match[1];
+            }
+            // Si _name = False, devolver null explícitamente
+            if (line.match(/_name\s*=\s*False/)) {
+                return null;
             }
         }
         return null;
