@@ -260,11 +260,11 @@ export class ProjectManager {
             
             // Buscar indicadores de que es una instalación de Gextia
             const possibleIndicators = [
-                path.join(gextiaPath, 'gextia', '__init__.py'),
-                path.join(gextiaPath, 'gextia', 'release.py'),
+                path.join(gextiaPath, 'odoo', '__init__.py'),
+                path.join(gextiaPath, 'odoo', 'release.py'),
                 path.join(gextiaPath, 'addons', 'base', '__manifest__.py'),
                 path.join(gextiaPath, 'addons', 'base', '__openerp__.py'),
-                path.join(gextiaPath, 'gextia-bin'),
+                path.join(gextiaPath, 'odoo-bin'),
             ];
 
             for (const indicator of possibleIndicators) {
