@@ -124,6 +124,11 @@
         "command": "gextia-dev-helper.debugRefreshCache",
         "title": "Debug Refresh Models Cache",
         "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.openGextiaManager",
+        "title": "Abrir Gestor Gextia",
+        "category": "Gextia"
       }
     ],
     "configuration": {
@@ -142,13 +147,7 @@
         "gextia-dev-helper.gextiaVersion": {
           "type": "string",
           "enum": [
-            "11.0",
-            "12.0",
-            "13.0",
-            "14.0",
-            "15.0",
-            "16.0",
-            "17.0"
+            "16.0"
           ],
           "default": "16.0",
           "description": "Gextia version for the current project"
@@ -165,12 +164,44 @@
         }
       }
     },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "gextiaManagerContainer",
+          "title": "Gestor Gextia",
+          "icon": "assets/icons/gextia.svg"
+        }
+      ]
+    },
+    "views": {
+      "gextiaManagerContainer": [
+        {
+          "id": "gextiaManagerView",
+          "name": "Gestor Gextia",
+          "icon": "assets/icons/gextia.svg"
+        }
+      ]
+    },
     "menus": {
       "explorer/context": [
         {
           "command": "gextia-dev-helper.showInheritanceTree",
           "when": "resourceExtname == .py",
           "group": "gextia"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "gextia-dev-helper.openGextiaManager",
+          "when": "true",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "gextia-dev-helper.openGextiaManager",
+          "when": "view == gextiaManagerView",
+          "group": "navigation@1"
         }
       ]
     },
