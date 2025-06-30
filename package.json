@@ -3,7 +3,7 @@
   "displayName": "Gextia Development Helper",
   "description": "Intelligent autocompletion and project management for Gextia development",
   "version": "1.0.0",
-  "publisher": "Jesús Lorenzo",
+  "publisher": "JesusLorenzo",
   "repository": {
     "type": "git",
     "url": "https://github.com/Zarritas/vs-extension.git"
