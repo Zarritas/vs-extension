@@ -2,7 +2,7 @@
   "name": "gextia-dev-helper",
   "displayName": "Gextia Development Helper",
   "description": "Intelligent autocompletion and project management for Gextia development",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "publisher": "JesusLorenzo",
   "repository": {
     "type": "git",
@@ -141,7 +141,15 @@
         },
         "gextia-dev-helper.gextiaVersion": {
           "type": "string",
-          "enum": ["11.0", "12.0", "13.0", "14.0", "15.0", "16.0", "17.0"],
+          "enum": [
+            "11.0",
+            "12.0",
+            "13.0",
+            "14.0",
+            "15.0",
+            "16.0",
+            "17.0"
+          ],
           "default": "16.0",
           "description": "Gextia version for the current project"
         },
@@ -169,11 +177,12 @@
     "languages": [
       {
         "id": "python",
-        "extensions": [".py"]
+        "extensions": [
+          ".py"
+        ]
       }
     ]
   },
-  
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
