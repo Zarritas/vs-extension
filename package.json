@@ -2,7 +2,7 @@
   "name": "gextia-dev-helper",
   "displayName": "Gextia Development Helper",
   "description": "Intelligent autocompletion and project management for Gextia development",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "publisher": "JesusLorenzo",
   "repository": {
     "type": "git",
