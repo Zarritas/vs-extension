@@ -124,11 +124,6 @@
         "command": "gextia-dev-helper.debugRefreshCache",
         "title": "Debug Refresh Models Cache",
         "category": "Gextia"
-      },
-      {
-        "command": "gextia-dev-helper.openGextiaManager",
-        "title": "Abrir Gestor Gextia",
-        "category": "Gextia"
       }
     ],
     "configuration": {
