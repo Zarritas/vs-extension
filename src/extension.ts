@@ -1,3 +1,20 @@
+/**
+ * Extensión VS Code: Gextia Development Helper
+ * ---------------------------------------------
+ * Proporciona gestión avanzada de proyectos Gextia, autocompletado inteligente,
+ * navegación de modelos, gestión visual de rutas y repositorios, y utilidades
+ * para desarrolladores de addons Gextia.
+ *
+ * Estructura principal:
+ * - TreeView nativo para gestión visual de rutas, modelos, componentes y acciones.
+ * - Comandos para manipulación de rutas, perfiles y repositorios.
+ * - Proveedores de autocompletado y navegación para Python.
+ * - Utilidades para refresco de caché y sincronización remota.
+ *
+ * Autor: Jesus Lorenzo
+ * Última revisión: 2025-07-02
+ */
+
 import * as vscode from 'vscode';
 import { ProjectManager } from './config/projectManager';
 import { ModelsCache } from './cache/modelsCache';
@@ -10,29 +27,138 @@ import { GextiaTreeProvider } from './gextiaTreeProvider';
 export function activate(context: vscode.ExtensionContext) {
     console.log('Gextia Development Helper is now active!');
 
-    // Inicializar el gestor de proyectos
+    // Instancias singleton globales para evitar llamadas repetidas
     const projectManager = ProjectManager.getInstance();
-    
-    // Inicializar el cache de modelos
     const modelsCache = ModelsCache.getInstance();
-    modelsCache.initialize().catch(error => {
-        console.error('Error initializing models cache:', error);
+    const remoteManager = RemoteRepositoryManager.getInstance();
+    
+    // Utilidad para mostrar mensajes y log de depuración
+    function showMsg(msg: string, type: 'info'|'warn'|'error' = 'info') {
+        if (type === 'info') vscode.window.showInformationMessage(msg);
+        else if (type === 'warn') vscode.window.showWarningMessage(msg);
+        else vscode.window.showErrorMessage(msg);
+        projectManager.log(`[${type.toUpperCase()}] ${msg}`);
+    }
+
+    // Utilidad para loggear acciones
+    function debugLog(action: string, data?: any) {
+        let msg = `[DEBUG] Acción: ${action}`;
+        if (data !== undefined) {
+            try {
+                msg += ' | Datos: ' + JSON.stringify(data);
+            } catch {
+                msg += ' | Datos: [no serializable]';
+            }
+        }
+        projectManager.log(msg);
+    }
+
+    // --- Handlers de selección de nodos del TreeView ---
+    async function handleCampoNode(item: any) {
+        debugLog('handleCampoNode', item);
+        if (item.parentModelName) {
+            const modelos = modelsCache.getModels(item.parentModelName);
+            if (modelos.length > 0) {
+                const campo = modelos[0].fields.find((f: any) => f.name === item.label);
+                if (campo && modelos[0].filePath && campo.lineNumber) {
+                    try {
+                        const doc = await vscode.workspace.openTextDocument(modelos[0].filePath);
+                        await vscode.window.showTextDocument(doc, { selection: new vscode.Range(campo.lineNumber-1,0,campo.lineNumber-1,0), preview: false });
+                        debugLog('Campo abierto correctamente', { file: modelos[0].filePath, line: campo.lineNumber });
+                    } catch (error) {
+                        debugLog('Error abriendo campo', error);
+                        showMsg('No se pudo abrir el archivo del campo: ' + error, 'error');
+                    }
+                } else {
+                    showMsg(`Campo: ${item.label}${item.description ? ' (' + item.description + ')' : ''}\n${item.tooltip || ''}`);
+                }
+            }
+        }
+    }
+    async function handleMetodoNode(item: any) {
+        debugLog('handleMetodoNode', item);
+        if (item.parentModelName) {
+            const modelos = modelsCache.getModels(item.parentModelName);
+            if (modelos.length > 0) {
+                const metodo = modelos[0].methods.find((m: any) => m.name === item.label);
+                if (metodo && modelos[0].filePath && metodo.lineNumber) {
+                    const doc = await vscode.workspace.openTextDocument(modelos[0].filePath);
+                    await vscode.window.showTextDocument(doc, { selection: new vscode.Range(metodo.lineNumber-1,0,metodo.lineNumber-1,0) });
+                } else {
+                    showMsg(`Método: ${item.label}\n${item.tooltip || ''}`);
+                }
+            }
+        }
+    }
+    async function handleComponenteNode(item: any) {
+        debugLog('handleComponenteNode', item);
+        const componentes = modelsCache.getComponent(item.label);
+        if (componentes.length > 0) {
+            const comp = componentes[0];
+            const msg = `Componente: ${comp.name}\nArchivo: ${comp.filePath}\nClase: ${comp.className}\nCampos: ${comp.fields.length}\nMétodos: ${comp.methods.length}`;
+            const open = await vscode.window.showInformationMessage(msg, 'Abrir archivo');
+            if (open === 'Abrir archivo') {
+                const doc = await vscode.workspace.openTextDocument(comp.filePath);
+                vscode.window.showTextDocument(doc, { selection: new vscode.Range(comp.lineNumber-1,0,comp.lineNumber-1,0) });
+            }
+        } else {
+            showMsg('No se encontró información del componente.', 'warn');
+        }
+    }
+
+    // Registrar el TreeView nativo en la barra lateral
+    const gextiaTreeProvider = new GextiaTreeProvider();
+    const gextiaTreeView = vscode.window.createTreeView('gextiaManagerView', {
+        treeDataProvider: gextiaTreeProvider,
+        showCollapseAll: true
+    });
+    context.subscriptions.push(gextiaTreeView);
+
+    // Acción al seleccionar un nodo de modelo o componente
+    gextiaTreeView.onDidChangeSelection(async (e) => {
+        const item = e.selection[0];
+        if (!item) return;
+        if (item.contextValue === 'campo') {
+            await handleCampoNode(item);
+        } else if (item.contextValue === 'metodo') {
+            await handleMetodoNode(item);
+        } else if (item.contextValue === 'componente') {
+            await handleComponenteNode(item);
+        }
+        // 'modelo' solo expande
     });
 
     // Registrar comandos
     const createProfileCommand = vscode.commands.registerCommand(
         'gextia-dev-helper.createProfile',
-        () => projectManager.createProfile()
+        async () => {
+            debugLog('createProfileCommand');
+            try {
+                await projectManager.createProfile();
+            } catch (error) {
+                debugLog('createProfileCommand ERROR', error);
+                showMsg('Error al crear perfil: ' + error, 'error');
+            }
+        }
     );
 
     const switchProfileCommand = vscode.commands.registerCommand(
-        'gextia-dev-helper.switchProfile', 
-        () => projectManager.switchProfile()
+        'gextia-dev-helper.switchProfile',
+        async () => {
+            debugLog('switchProfileCommand');
+            try {
+                await projectManager.switchProfile();
+            } catch (error) {
+                debugLog('switchProfileCommand ERROR', error);
+                showMsg('Error al cambiar perfil: ' + error, 'error');
+            }
+        }
     );
 
     const refreshModelsCommand = vscode.commands.registerCommand(
         'gextia-dev-helper.refreshModels',
         async () => {
+            debugLog('refreshModelsCommand');
             try {
                 vscode.window.showInformationMessage('Refreshing Gextia models cache...');
                 
@@ -66,6 +192,7 @@ export function activate(context: vscode.ExtensionContext) {
                 );
                 
             } catch (error) {
+                debugLog('refreshModelsCommand ERROR', error);
                 vscode.window.showErrorMessage(`Error refreshing cache: ${error}`);
             }
         }
@@ -74,6 +201,7 @@ export function activate(context: vscode.ExtensionContext) {
     const showInheritanceTreeCommand = vscode.commands.registerCommand(
         'gextia-dev-helper.showInheritanceTree',
         async () => {
+            debugLog('showInheritanceTreeCommand');
             try {
                 const projectManager = ProjectManager.getInstance();
                 const modelsCache = ModelsCache.getInstance();
@@ -115,6 +243,7 @@ export function activate(context: vscode.ExtensionContext) {
                 await vscode.window.showTextDocument(document);
                 
             } catch (error) {
+                debugLog('showInheritanceTreeCommand ERROR', error);
                 vscode.window.showErrorMessage(`Error showing inheritance tree: ${error}`);
             }
         }
@@ -254,506 +383,25 @@ export function activate(context: vscode.ExtensionContext) {
         }
     );
 
-    const syncRemoteRepositoriesCommand = vscode.commands.registerCommand(
-        'gextia-dev-helper.syncRemoteRepositories',
-        async () => {
-            try {
-                const projectManager = ProjectManager.getInstance();
-                const remoteManager = RemoteRepositoryManager.getInstance();
-                
-                // Verificar que hay un perfil activo
-                if (!projectManager.hasActiveProfile()) {
-                    vscode.window.showWarningMessage('No hay un perfil de proyecto activo. Crea uno primero.');
-                    return;
-                }
-                
-                const profile = projectManager.getCurrentProfile();
-                if (!profile || !profile.paths.remoteRepositories || profile.paths.remoteRepositories.length === 0) {
-                    vscode.window.showInformationMessage('No hay repositorios remotos configurados.');
-                    return;
-                }
-                
-                const repositories = profile.paths.remoteRepositories;
-                
-                let successCount = 0;
-                let errorCount = 0;
-                
-                // Mostrar progreso
-                await vscode.window.withProgress({
-                    location: vscode.ProgressLocation.Notification,
-                    title: "Sincronizando Repositorios Remotos",
-                    cancellable: false
-                }, async (progress) => {
-                    for (let i = 0; i < repositories.length; i++) {
-                        const repo = repositories[i];
-                        progress.report({ 
-                            message: `Sincronizando ${repo.name} (${i + 1}/${repositories.length})`,
-                            increment: 100 / repositories.length
-                        });
-                        
-                        const success = await remoteManager.syncRepository(repo);
-                        if (success) {
-                            successCount++;
-                        } else {
-                            errorCount++;
-                        }
-                    }
-                    
-                    progress.report({ message: 'Sincronización completada' });
-                });
-                
-                // Mostrar resultados
-                if (errorCount > 0) {
-                    vscode.window.showWarningMessage(
-                        `Sincronización completada con errores: ${successCount} exitosos, ${errorCount} fallidos. Revisa el log para más detalles.`
-                    );
-                } else {
-                    vscode.window.showInformationMessage(
-                        `Sincronización completada exitosamente: ${successCount} repositorios actualizados.`
-                    );
-                    
-                    // Preguntar si refrescar el cache para incluir los nuevos repositorios
-                    if (successCount > 0) {
-                        const refreshCache = await vscode.window.showQuickPick(['Sí', 'No'], {
-                            placeHolder: '¿Refrescar el cache de modelos para incluir los repositorios sincronizados?'
-                        });
-                        
-                        if (refreshCache === 'Sí') {
-                            vscode.window.showInformationMessage('Refrescando cache de modelos...');
-                            
-                            const modelsCache = ModelsCache.getInstance();
-                            await vscode.window.withProgress({
-                                location: vscode.ProgressLocation.Notification,
-                                title: "Refrescando Cache de Modelos",
-                                cancellable: false
-                            }, async (progress) => {
-                                progress.report({ message: 'Inicializando cache...' });
-                                await modelsCache.refreshCache();
-                                progress.report({ message: 'Cache actualizado exitosamente' });
-                            });
-                            
-                            // Mostrar estadísticas actualizadas
-                            const stats = modelsCache.getCacheStats();
-                            vscode.window.showInformationMessage(
-                                `Cache actualizado: ${stats.totalModels} modelos en ${stats.uniqueModelNames} tipos únicos`
-                            );
-                        }
-                    }
-                }
-                
-            } catch (error) {
-                vscode.window.showErrorMessage(`Error sincronizando repositorios: ${error}`);
-            }
+    // Comando para modificar una ruta desde el TreeView
+    context.subscriptions.push(vscode.commands.registerCommand('gextia-dev-helper.editRuta', async (item: {label: string}) => {
+        if (!item || !item.label) return;
+        const profile = projectManager.getCurrentProfile();
+        if (!profile) return;
+        const nuevaRuta = await vscode.window.showInputBox({
+            prompt: 'Nueva ruta para reemplazar',
+            value: item.label
+        });
+        if (nuevaRuta && nuevaRuta !== item.label) {
+            await projectManager.removeAddonsPath(item.label);
+            await projectManager.addAddonsPath(nuevaRuta);
+            vscode.commands.executeCommand('gextia-dev-helper.refreshTree');
         }
-    );
-
-    const showSyncLogCommand = vscode.commands.registerCommand(
-        'gextia-dev-helper.showSyncLog',
-        () => {
-            const remoteManager = RemoteRepositoryManager.getInstance();
-            remoteManager.showLog();
-        }
-    );
-
-    const clearSyncLogCommand = vscode.commands.registerCommand(
-        'gextia-dev-helper.clearSyncLog',
-        () => {
-            const remoteManager = RemoteRepositoryManager.getInstance();
-            remoteManager.clearLog();
-            vscode.window.showInformationMessage('Log de sincronización limpiado.');
-        }
-    );
-
-    const testRepositoryConnectionCommand = vscode.commands.registerCommand(
-        'gextia-dev-helper.testRepositoryConnection',
-        async () => {
-            try {
-                const projectManager = ProjectManager.getInstance();
-                const remoteManager = RemoteRepositoryManager.getInstance();
-                
-                // Verificar que hay un perfil activo
-                if (!projectManager.hasActiveProfile()) {
-                    vscode.window.showWarningMessage('No hay un perfil de proyecto activo. Crea uno primero.');
-                    return;
-                }
-                
-                const profile = projectManager.getCurrentProfile();
-                if (!profile || !profile.paths.remoteRepositories || profile.paths.remoteRepositories.length === 0) {
-                    vscode.window.showInformationMessage('No hay repositorios remotos configurados.');
-                    return;
-                }
-                
-                // Seleccionar repositorio para probar
-                const repoOptions = profile.paths.remoteRepositories.map((repo: RemoteRepository) => ({
-                    label: repo.name,
-                    description: repo.url,
-                    detail: repo.branch ? `Rama: ${repo.branch}` : 'Rama: main',
-                    repo: repo
-                }));
-                
-                const selected = await vscode.window.showQuickPick(repoOptions, {
-                    placeHolder: 'Selecciona un repositorio para probar la conexión'
-                });
-                
-                if (!selected) return;
-                
-                // Probar conexión
-                vscode.window.showInformationMessage(`Probando conexión a ${selected.repo.name}...`);
-                
-                const testResult = await remoteManager.testRepositoryConnection(selected.repo);
-                
-                if (testResult.success) {
-                    vscode.window.showInformationMessage(`✓ Conexión exitosa a ${selected.repo.name}`);
-                } else {
-                    vscode.window.showErrorMessage(`✗ Error de conexión a ${selected.repo.name}: ${testResult.error}`);
-                }
-                
-            } catch (error) {
-                vscode.window.showErrorMessage(`Error probando conexión: ${error}`);
-            }
-        }
-    );
-
-    const showRemoteRepositoriesInfoCommand = vscode.commands.registerCommand(
-        'gextia-dev-helper.showRemoteRepositoriesInfo',
-        () => {
-            const projectManager = ProjectManager.getInstance();
-            
-            if (!projectManager.hasActiveProfile()) {
-                vscode.window.showWarningMessage('No hay un perfil de proyecto activo.');
-                return;
-            }
-            
-            const profile = projectManager.getCurrentProfile();
-            if (!profile || !profile.paths.remoteRepositories || profile.paths.remoteRepositories.length === 0) {
-                vscode.window.showInformationMessage('No hay repositorios remotos configurados.');
-                return;
-            }
-            
-            let message = `**Repositorios Remotos Configurados**\n\n`;
-            
-            for (const repo of profile.paths.remoteRepositories) {
-                const status = repo.enabled ? '✅' : '❌';
-                const lastSync = repo.lastSync 
-                    ? new Date(repo.lastSync).toLocaleDateString() 
-                    : 'Nunca';
-                
-                message += `${status} **${repo.name}**\n`;
-                message += `   URL: ${repo.url}\n`;
-                message += `   🌿 Rama: ${repo.branch || 'main'}\n`;
-                message += `   📅 Última sync: ${lastSync}\n`;
-                message += `   Privado: ${repo.isPrivate ? 'Sí' : 'No'}\n\n`;
-            }
-            
-            vscode.window.showInformationMessage(message);
-        }
-    );
-
-    const goToModelDefinitionCommand = vscode.commands.registerCommand(
-        'gextia-dev-helper.goToModelDefinition',
-        async () => {
-            try {
-                const projectManager = ProjectManager.getInstance();
-                const modelsCache = ModelsCache.getInstance();
-                
-                // Verificar que hay un perfil activo y cache listo
-                if (!projectManager.hasActiveProfile() || !modelsCache.isReady()) {
-                    vscode.window.showWarningMessage('No hay un perfil activo o el cache no está listo.');
-                    return;
-                }
-                
-                // Obtener el editor activo
-                const editor = vscode.window.activeTextEditor;
-                if (!editor) {
-                    vscode.window.showWarningMessage('No hay un archivo abierto.');
-                    return;
-                }
-                
-                const document = editor.document;
-                const position = editor.selection.active;
-                const lineText = document.lineAt(position.line).text;
-                
-                // Buscar si estamos en una línea con _inherit o _name
-                const inheritMatch = lineText.match(/_inherit\s*=\s*['"]([^'"]+)['"]/);
-                const nameMatch = lineText.match(/_name\s*=\s*['"]([^'"]+)['"]/);
-                
-                let modelName: string | null = null;
-                
-                if (inheritMatch) {
-                    modelName = inheritMatch[1];
-                } else if (nameMatch) {
-                    modelName = nameMatch[1];
-                }
-                
-                if (!modelName) {
-                    vscode.window.showWarningMessage('No se encontró un modelo en la línea actual.');
-                    return;
-                }
-                
-                // Buscar el modelo base en el cache
-                const baseModels = modelsCache.getModels(modelName);
-                const baseModel = baseModels.find(m => !m.isInherit); // Modelo base (no heredado)
-                
-                if (!baseModel) {
-                    vscode.window.showWarningMessage(`No se encontró el modelo base: ${modelName}`);
-                    return;
-                }
-                
-                // Abrir el archivo y navegar a la línea
-                const uri = vscode.Uri.file(baseModel.filePath);
-                const range = new vscode.Range(
-                    new vscode.Position(baseModel.lineNumber - 1, 0),
-                    new vscode.Position(baseModel.lineNumber - 1, 0)
-                );
-                
-                await vscode.window.showTextDocument(uri, { selection: range });
-                vscode.window.showInformationMessage(`Navegando a ${modelName} en ${path.basename(baseModel.filePath)}`);
-                
-            } catch (error) {
-                vscode.window.showErrorMessage(`Error navegando al modelo: ${error}`);
-            }
-        }
-    );
-
-    const addProjectPathCommand = vscode.commands.registerCommand(
-        'gextia-dev-helper.addProjectPath',
-        async () => {
-            try {
-                const projectManager = ProjectManager.getInstance();
-                
-                if (!projectManager.hasActiveProfile()) {
-                    vscode.window.showWarningMessage('No hay un perfil activo. Crea uno primero.');
-                    return;
-                }
-                
-                // Seleccionar carpeta
-                const folderUri = await vscode.window.showOpenDialog({
-                    canSelectFolders: true,
-                    canSelectFiles: false,
-                    canSelectMany: false,
-                    openLabel: 'Seleccionar carpeta de addons'
-                });
-
-                if (folderUri && folderUri.length > 0) {
-                    const selectedPath = folderUri[0].fsPath;
-                    
-                    // Verificar si es una carpeta de addons válida
-                    const hasManifest = await checkIfAddonsFolder(selectedPath);
-                    
-                    if (!hasManifest) {
-                        const confirm = await vscode.window.showWarningMessage(
-                            'Esta carpeta no parece contener módulos de Gextia. ¿Continuar de todas formas?',
-                            'Continuar',
-                            'Cancelar'
-                        );
-                        
-                        if (confirm !== 'Continuar') {
-                            return;
-                        }
-                    }
-                    
-                    const success = await projectManager.addAddonsPath(selectedPath);
-                    
-                    if (success) {
-                        // Preguntar si refrescar el cache
-                        const refreshCache = await vscode.window.showQuickPick(['Sí', 'No'], {
-                            placeHolder: '¿Refrescar el cache de modelos ahora?'
-                        });
-                        
-                        if (refreshCache === 'Sí') {
-                            const modelsCache = ModelsCache.getInstance();
-                            await modelsCache.refreshCache();
-                            vscode.window.showInformationMessage('Cache actualizado con la nueva ruta.');
-                        }
-                    }
-                }
-                
-            } catch (error) {
-                vscode.window.showErrorMessage(`Error agregando ruta: ${error}`);
-            }
-        }
-    );
-
-    const addRemoteRepositoryCommand = vscode.commands.registerCommand(
-        'gextia-dev-helper.addRemoteRepository',
-        async () => {
-            try {
-                const projectManager = ProjectManager.getInstance();
-                const remoteManager = RemoteRepositoryManager.getInstance();
-                
-                if (!projectManager.hasActiveProfile()) {
-                    vscode.window.showWarningMessage('No hay un perfil activo. Crea uno primero.');
-                    return;
-                }
-                
-                // Configurar repositorio usando el RemoteRepositoryManager
-                const repository = await remoteManager.configureRemoteRepository();
-                
-                if (repository) {
-                    const success = await projectManager.addRemoteRepository(repository);
-                    
-                    if (success) {
-                        // Preguntar si sincronizar ahora
-                        const syncNow = await vscode.window.showQuickPick(['Sí', 'No'], {
-                            placeHolder: '¿Sincronizar repositorio ahora? (puede tardar unos minutos)'
-                        });
-                        
-                        if (syncNow === 'Sí') {
-                            vscode.window.showInformationMessage('Sincronizando repositorio...');
-                            const syncSuccess = await remoteManager.syncRepository(repository);
-                            
-                            if (syncSuccess) {
-                                vscode.window.showInformationMessage(`Repositorio "${repository.name}" sincronizado exitosamente`);
-                                
-                                // Preguntar si refrescar el cache
-                                const refreshCache = await vscode.window.showQuickPick(['Sí', 'No'], {
-                                    placeHolder: '¿Refrescar el cache de modelos ahora?'
-                                });
-                                
-                                if (refreshCache === 'Sí') {
-                                    const modelsCache = ModelsCache.getInstance();
-                                    await modelsCache.refreshCache();
-                                    vscode.window.showInformationMessage('Cache actualizado con el nuevo repositorio.');
-                                }
-                            } else {
-                                vscode.window.showWarningMessage(`Error sincronizando repositorio "${repository.name}"`);
-                            }
-                        }
-                    }
-                }
-                
-            } catch (error) {
-                vscode.window.showErrorMessage(`Error agregando repositorio: ${error}`);
-            }
-        }
-    );
-
-    const manageProjectPathsCommand = vscode.commands.registerCommand(
-        'gextia-dev-helper.manageProjectPaths',
-        async () => {
-            try {
-                const projectManager = ProjectManager.getInstance();
-                
-                if (!projectManager.hasActiveProfile()) {
-                    vscode.window.showWarningMessage('No hay un perfil activo. Crea uno primero.');
-                    return;
-                }
-                
-                const profile = projectManager.getCurrentProfile();
-                if (!profile) {
-                    vscode.window.showWarningMessage('No se pudo obtener el perfil actual.');
-                    return;
-                }
-                
-                // Crear lista de opciones
-                const options = [
-                    '📁 Agregar ruta de addons',
-                    '🌐 Agregar repositorio remoto',
-                    '📊 Ver información del proyecto',
-                    '🗑️ Remover ruta de addons',
-                    '🗑️ Remover repositorio remoto',
-                    '🔄 Refrescar cache de modelos'
-                ];
-                
-                const action = await vscode.window.showQuickPick(options, {
-                    placeHolder: 'Selecciona una acción'
-                });
-                
-                if (!action) return;
-                
-                switch (action) {
-                    case '📁 Agregar ruta de addons':
-                        vscode.commands.executeCommand('gextia-dev-helper.addProjectPath');
-                        break;
-                        
-                    case '🌐 Agregar repositorio remoto':
-                        vscode.commands.executeCommand('gextia-dev-helper.addRemoteRepository');
-                        break;
-                        
-                    case '📊 Ver información del proyecto':
-                        projectManager.showProjectInfo();
-                        break;
-                        
-                    case '🗑️ Remover ruta de addons':
-                        await removeAddonsPath(projectManager, profile);
-                        break;
-                        
-                    case '🗑️ Remover repositorio remoto':
-                        await removeRemoteRepository(projectManager, profile);
-                        break;
-                        
-                    case '🔄 Refrescar cache de modelos':
-                        const modelsCache = ModelsCache.getInstance();
-                        await modelsCache.refreshCache();
-                        vscode.window.showInformationMessage('Cache de modelos refrescado.');
-                        break;
-                }
-                
-            } catch (error) {
-                vscode.window.showErrorMessage(`Error gestionando rutas: ${error}`);
-            }
-        }
-    );
-
-    const deleteProfileCommand = vscode.commands.registerCommand(
-        'gextia-dev-helper.deleteProfile',
-        () => projectManager.deleteProfile()
-    );
-
-    // Registrar el TreeView nativo en la barra lateral
-    const gextiaTreeProvider = new GextiaTreeProvider();
-    const gextiaTreeView = vscode.window.createTreeView('gextiaManagerView', {
-        treeDataProvider: gextiaTreeProvider,
-        showCollapseAll: true
-    });
-    context.subscriptions.push(gextiaTreeView);
-
-    // Acción al seleccionar un nodo de modelo o componente
-    gextiaTreeView.onDidChangeSelection(async (e) => {
-        const item = e.selection[0];
-        if (!item) return;
-        const modelsCache = ModelsCache.getInstance();
-        if (item.contextValue === 'campo') {
-            vscode.window.showInformationMessage(`Campo: ${item.label}${item.description ? ' (' + item.description + ')' : ''}\n${item.tooltip || ''}`);
-        } else if (item.contextValue === 'metodo') {
-            vscode.window.showInformationMessage(`Método: ${item.label}\n${item.tooltip || ''}`);
-        } else if (item.contextValue === 'modelo') {
-            // No mostrar info, solo expandir
-        } else if (item.contextValue === 'componente') {
-            const componentes = modelsCache.getComponent(item.label);
-            if (componentes.length > 0) {
-                const comp = componentes[0];
-                const msg = `Componente: ${comp.name}\nArchivo: ${comp.filePath}\nClase: ${comp.className}\nCampos: ${comp.fields.length}\nMétodos: ${comp.methods.length}`;
-                const open = await vscode.window.showInformationMessage(msg, 'Abrir archivo');
-                if (open === 'Abrir archivo') {
-                    const doc = await vscode.workspace.openTextDocument(comp.filePath);
-                    vscode.window.showTextDocument(doc, { selection: new vscode.Range(comp.lineNumber-1,0,comp.lineNumber-1,0) });
-                }
-            } else {
-                vscode.window.showWarningMessage('No se encontró información del componente.');
-            }
-        }
-    });
-
-    // Registrar los comandos en el contexto
-    context.subscriptions.push(
-        createProfileCommand,
-        switchProfileCommand,
-        refreshModelsCommand,
-        deleteProfileCommand
-    );
-
-    // Comando para abrir la ventana visual (Webview)
-    const openGextiaManagerCommand = vscode.commands.registerCommand(
-       'gextia-dev-helper.openGextiaManager',
-        () => { /* ...WebviewPanel eliminado... */ }
-    );
-    context.subscriptions.push(openGextiaManagerCommand);
+    }));
 
     // Comando para borrar una ruta desde el TreeView
-    context.subscriptions.push(vscode.commands.registerCommand('gextia-dev-helper.deleteRuta', async (item) => {
+    context.subscriptions.push(vscode.commands.registerCommand('gextia-dev-helper.deleteRuta', async (item: {label: string}) => {
         if (!item || !item.label) return;
-        const projectManager = ProjectManager.getInstance();
         const profile = projectManager.getCurrentProfile();
         if (!profile) return;
         const confirm = await vscode.window.showWarningMessage(`¿Borrar la ruta "${item.label}" del perfil activo?`, 'Sí', 'No');
@@ -763,145 +411,44 @@ export function activate(context: vscode.ExtensionContext) {
         }
     }));
 
-    // Comando para modificar una ruta desde el TreeView
-    context.subscriptions.push(vscode.commands.registerCommand('gextia-dev-helper.editRuta', async (item) => {
-        if (!item || !item.label) return;
-        const projectManager = ProjectManager.getInstance();
-        const profile = projectManager.getCurrentProfile();
-        if (!profile) return;
-        const nuevaRuta = await vscode.window.showInputBox({
-            prompt: 'Nueva ruta para reemplazar',
-            value: item.label
-        });
-        if (nuevaRuta && nuevaRuta !== item.label) {
-            // Eliminar la anterior y agregar la nueva
-            await projectManager.removeAddonsPath(item.label);
-            await projectManager.addAddonsPath(nuevaRuta);
-            vscode.commands.executeCommand('gextia-dev-helper.refreshTree');
-        }
+    // Comando para refrescar el TreeView desde cualquier acción
+    context.subscriptions.push(vscode.commands.registerCommand('gextia-dev-helper.refreshTree', () => {
+        gextiaTreeProvider.refresh();
     }));
 
-    // Funciones auxiliares para manageProjectPaths
-    async function removeAddonsPath(projectManager: ProjectManager, profile: any): Promise<void> {
-        if (profile.paths.addonsPath.length === 0) {
-            vscode.window.showInformationMessage('No hay rutas de addons configuradas.');
-            return;
-        }
-        
-        const selectedPath = await vscode.window.showQuickPick(profile.paths.addonsPath, {
-            placeHolder: 'Selecciona la ruta a remover'
-        });
-        
-        if (selectedPath) {
-            const success = await projectManager.removeAddonsPath(selectedPath);
-            if (success) {
-                const refreshCache = await vscode.window.showQuickPick(['Sí', 'No'], {
-                    placeHolder: '¿Refrescar el cache de modelos ahora?'
-                });
-                
-                if (refreshCache === 'Sí') {
-                    const modelsCache = ModelsCache.getInstance();
-                    await modelsCache.refreshCache();
-                    vscode.window.showInformationMessage('Cache actualizado.');
-                }
-            }
-        }
-    }
+    // Registrar comandos para doble clic en campos y métodos
+    context.subscriptions.push(vscode.commands.registerCommand('gextia-dev-helper.openCampo', async (item: any) => {
+        await handleCampoNode(item);
+    }));
+    context.subscriptions.push(vscode.commands.registerCommand('gextia-dev-helper.openMetodo', async (item: any) => {
+        await handleMetodoNode(item);
+    }));
 
-    async function removeRemoteRepository(projectManager: ProjectManager, profile: any): Promise<void> {
-        if (!profile.paths.remoteRepositories || profile.paths.remoteRepositories.length === 0) {
-            vscode.window.showInformationMessage('No hay repositorios remotos configurados.');
-            return;
-        }
-        
-        const repoNames = profile.paths.remoteRepositories.map((repo: any) => repo.name);
-        const selectedRepo = await vscode.window.showQuickPick(repoNames, {
-            placeHolder: 'Selecciona el repositorio a remover'
-        });
-        
-        if (selectedRepo) {
-            const success = await projectManager.removeRemoteRepository(selectedRepo);
-            if (success) {
-                const refreshCache = await vscode.window.showQuickPick(['Sí', 'No'], {
-                    placeHolder: '¿Refrescar el cache de modelos ahora?'
-                });
-                
-                if (refreshCache === 'Sí') {
-                    const modelsCache = ModelsCache.getInstance();
-                    await modelsCache.refreshCache();
-                    vscode.window.showInformationMessage('Cache actualizado.');
-                }
-            }
-        }
+    // --- WRAP comandos de repositorios remotos para mostrar mensaje de "No disponible" ---
+    function notAvailableMsg() {
+        vscode.window.showWarningMessage('La funcionalidad de repositorios remotos aún no está disponible. Próximamente.');
     }
+    // Sobrescribir comandos de repositorios remotos para mostrar el mensaje
+    context.subscriptions.push(
+        vscode.commands.registerCommand('gextia-dev-helper.syncRemoteRepositories', notAvailableMsg),
+        vscode.commands.registerCommand('gextia-dev-helper.showRemoteRepositoriesInfo', notAvailableMsg),
+        vscode.commands.registerCommand('gextia-dev-helper.testRepositoryConnection', notAvailableMsg),
+        vscode.commands.registerCommand('gextia-dev-helper.showSyncLog', notAvailableMsg),
+        vscode.commands.registerCommand('gextia-dev-helper.clearSyncLog', notAvailableMsg),
+        vscode.commands.registerCommand('gextia-dev-helper.addRemoteRepository', notAvailableMsg),
+        vscode.commands.registerCommand('gextia-dev-helper.removeRemoteRepository', notAvailableMsg)
+    );
 
-    // Función auxiliar para verificar si una carpeta contiene módulos de Gextia
-    async function checkIfAddonsFolder(folderPath: string): Promise<boolean> {
-        try {
-            const entries = await fs.promises.readdir(folderPath, { withFileTypes: true });
-            
-            // Buscar al menos un directorio que contenga __manifest__.py
-            for (const entry of entries) {
-                if (entry.isDirectory()) {
-                    const manifestPath = path.join(folderPath, entry.name, '__manifest__.py');
-                    const openerpPath = path.join(folderPath, entry.name, '__openerp__.py');
-                    
-                    try {
-                        await fs.promises.access(manifestPath);
-                        return true;
-                    } catch {
-                        try {
-                            await fs.promises.access(openerpPath);
-                            return true;
-                        } catch {
-                            // Continuar buscando
-                        }
-                    }
-                }
-            }
-            
-            return false;
-        } catch {
-            return false;
-        }
-    }
-
-    // Verificar si hay perfil activo al iniciar
-    if (!projectManager.hasActiveProfile()) {
-        vscode.window.showInformationMessage(
-            'No hay un perfil de Gextia configurado. ¿Crear uno?',
-            'Crear perfil'
-        ).then(selection => {
-            if (selection === 'Crear perfil') {
-                projectManager.createProfile();
-            }
-        });
-    } else {
-        // Inicializar cache si hay perfil activo
-        modelsCache.initialize().catch(error => {
-            console.error('Error initializing models cache:', error);
-        });
-    }
-
-    // Agregar todo al contexto
+    // Agregar todo al contexto (solo comandos locales y utilidades)
     context.subscriptions.push(
         createProfileCommand,
         switchProfileCommand,
         refreshModelsCommand,
         showInheritanceTreeCommand,
         showCacheStatsCommand,
-        syncRemoteRepositoriesCommand,
-        showSyncLogCommand,
-        clearSyncLogCommand,
-        testRepositoryConnectionCommand,
-        showRemoteRepositoriesInfoCommand,
         completionProvider,
         definitionProvider,
         fileWatcher,
-        goToModelDefinitionCommand,
-        addProjectPathCommand,
-        addRemoteRepositoryCommand,
-        manageProjectPathsCommand,
         showCacheLogCommand,
         debugRefreshCacheCommand
     );
@@ -915,7 +462,12 @@ export function deactivate() {
 }
 
 /**
- * Construye el árbol de herencia para un modelo
+ * Construye el árbol de herencia para un modelo Gextia.
+ * @param modelName Nombre del modelo raíz
+ * @param modelsCache Instancia de ModelsCache
+ * @param visited Set de modelos ya visitados (para evitar recursión infinita)
+ * @param maxDepth Profundidad máxima de recursión
+ * @returns Nodo raíz del árbol de herencia
  */
 function buildInheritanceTree(modelName: string, modelsCache: ModelsCache, visited: Set<string> = new Set(), maxDepth: number = 5): InheritanceNode {
     // Evitar recursión infinita
@@ -990,7 +542,10 @@ function buildInheritanceTree(modelName: string, modelsCache: ModelsCache, visit
 }
 
 /**
- * Obtiene información detallada de un repositorio remoto
+ * Obtiene información de repositorio remoto para un archivo dado.
+ * @param filePath Ruta absoluta del archivo
+ * @param projectManager Instancia de ProjectManager
+ * @returns Objeto con info de si es remoto, nombre y URL
  */
 function getRemoteRepositoryInfo(filePath: string, projectManager: ProjectManager): { isRemote: boolean, repoName: string, repoUrl: string } {
     const profile = projectManager.getCurrentProfile();
@@ -1015,7 +570,11 @@ function getRemoteRepositoryInfo(filePath: string, projectManager: ProjectManage
 }
 
 /**
- * Formatea el árbol de herencia para mostrar
+ * Formatea el árbol de herencia para mostrarlo en Markdown.
+ * @param node Nodo raíz del árbol
+ * @param level Nivel de indentación
+ * @param projectManager Instancia de ProjectManager
+ * @returns String Markdown del árbol
  */
 function formatInheritanceTree(node: InheritanceNode, level: number = 0, projectManager: ProjectManager): string {
     const indent = '  '.repeat(level);
@@ -1087,7 +646,11 @@ function formatInheritanceTree(node: InheritanceNode, level: number = 0, project
 }
 
 /**
- * Analiza el contexto para el autocompletado
+ * Analiza el contexto de autocompletado en un documento Python.
+ * @param document Documento VS Code
+ * @param position Posición del cursor
+ * @param modelsCache Instancia de ModelsCache
+ * @returns Contexto de autocompletado
  */
 function analyzeCompletionContext(
     document: vscode.TextDocument, 
@@ -1136,7 +699,10 @@ function analyzeCompletionContext(
 }
 
 /**
- * Genera elementos de autocompletado basados en el contexto
+ * Genera sugerencias de autocompletado para el contexto dado.
+ * @param context Contexto de autocompletado
+ * @param wordAtCursor Palabra bajo el cursor
+ * @returns Lista de CompletionItem
  */
 function generateCompletionItems(context: CompletionContext, wordAtCursor: string): vscode.CompletionItem[] {
     const items: vscode.CompletionItem[] = [];
@@ -1192,7 +758,15 @@ function generateCompletionItems(context: CompletionContext, wordAtCursor: strin
     return items;
 }
 
-// Funciones auxiliares para el análisis de contexto
+// --------------------
+// Funciones auxiliares
+// --------------------
+
+/**
+ * Detecta el nombre del modelo actual en el código.
+ * @param lines Líneas previas de código
+ * @returns Nombre del modelo o undefined
+ */
 function detectCurrentModel(lines: string[]): string | undefined {
     for (let i = lines.length - 1; i >= 0; i--) {
         const line = lines[i];
@@ -1204,6 +778,11 @@ function detectCurrentModel(lines: string[]): string | undefined {
     return undefined;
 }
 
+/**
+ * Detecta el método actual en el código.
+ * @param lines Líneas previas de código
+ * @returns Nombre del método o undefined
+ */
 function detectCurrentMethod(lines: string[]): string | undefined {
     for (let i = lines.length - 1; i >= 0; i--) {
         const line = lines[i];
@@ -1215,6 +794,11 @@ function detectCurrentMethod(lines: string[]): string | undefined {
     return undefined;
 }
 
+/**
+ * Detecta la clase actual en el código.
+ * @param lines Líneas previas de código
+ * @returns Nombre de la clase o undefined
+ */
 function detectCurrentClass(lines: string[]): string | undefined {
     for (let i = lines.length - 1; i >= 0; i--) {
         const line = lines[i];
@@ -1226,6 +810,11 @@ function detectCurrentClass(lines: string[]): string | undefined {
     return undefined;
 }
 
+/**
+ * Calcula el nivel de indentación de una línea.
+ * @param line Línea de código
+ * @returns Nivel de indentación (espacios)
+ */
 function calculateIndentLevel(line: string): number {
     let indent = 0;
     for (const char of line) {
@@ -1236,6 +825,12 @@ function calculateIndentLevel(line: string): number {
     return indent;
 }
 
+/**
+ * Determina si el cursor está dentro de una cadena.
+ * @param document Documento VS Code
+ * @param position Posición del cursor
+ * @returns true si está en una cadena
+ */
 function isCursorInString(document: vscode.TextDocument, position: vscode.Position): boolean {
     const line = document.lineAt(position.line).text;
     const beforeCursor = line.substring(0, position.character);
@@ -1247,6 +842,12 @@ function isCursorInString(document: vscode.TextDocument, position: vscode.Positi
     return (singleQuotes % 2 === 1) || (doubleQuotes % 2 === 1);
 }
 
+/**
+ * Determina si el cursor está dentro de un comentario.
+ * @param document Documento VS Code
+ * @param position Posición del cursor
+ * @returns true si está en un comentario
+ */
 function isCursorInComment(document: vscode.TextDocument, position: vscode.Position): boolean {
     const line = document.lineAt(position.line).text;
     const beforeCursor = line.substring(0, position.character);

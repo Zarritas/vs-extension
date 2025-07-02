@@ -76,30 +76,53 @@ export class GextiaTreeProvider implements vscode.TreeDataProvider<GextiaTreeIte
         }
         // Mostrar campos del modelo
         if (element.contextValue === 'camposGroup') {
-            const modelos = modelsCache.getModels(element.parentModelName!);
-            if (modelos.length > 0) {
-                const campos = modelos[0].fields || [];
-                return Promise.resolve(campos.map((f: any) => {
-                    const item = new GextiaTreeItem(f.name, 'campo', vscode.TreeItemCollapsibleState.None);
-                    item.description = f.type;
-                    item.tooltip = f.docString || '';
-                    return item;
-                }));
-            }
-            return Promise.resolve([]);
+            // Usar los campos fusionados de toda la herencia
+            const camposMap = modelsCache.getAllFieldsForModel(element.parentModelName!);
+            const campos = Array.from(camposMap.values()).flat();
+            return Promise.resolve(campos.map((f: any) => {
+                const item = new GextiaTreeItem(
+                    f.name,
+                    'campo',
+                    vscode.TreeItemCollapsibleState.None,
+                    {
+                        command: 'gextia-dev-helper.openCampo',
+                        title: 'Abrir campo',
+                        arguments: [{
+                            label: f.name,
+                            parentModelName: element.parentModelName,
+                            description: f.type,
+                            tooltip: f.docString || ''
+                        }]
+                    }
+                );
+                item.description = f.type;
+                item.tooltip = f.docString || '';
+                return item;
+            }));
         }
         // Mostrar métodos del modelo
         if (element.contextValue === 'metodosGroup') {
-            const modelos = modelsCache.getModels(element.parentModelName!);
-            if (modelos.length > 0) {
-                const metodos = modelos[0].methods || [];
-                return Promise.resolve(metodos.map((m: any) => {
-                    const item = new GextiaTreeItem(m.name, 'metodo', vscode.TreeItemCollapsibleState.None);
-                    item.tooltip = m.docString || '';
-                    return item;
-                }));
-            }
-            return Promise.resolve([]);
+            // Usar los métodos fusionados de toda la herencia
+            const metodosMap = modelsCache.getAllMethodsForModel(element.parentModelName!);
+            const metodos = Array.from(metodosMap.values()).flat();
+            return Promise.resolve(metodos.map((m: any) => {
+                const item = new GextiaTreeItem(
+                    m.name,
+                    'metodo',
+                    vscode.TreeItemCollapsibleState.None,
+                    {
+                        command: 'gextia-dev-helper.openMetodo',
+                        title: 'Abrir método',
+                        arguments: [{
+                            label: m.name,
+                            parentModelName: element.parentModelName,
+                            tooltip: m.docString || ''
+                        }]
+                    }
+                );
+                item.tooltip = m.docString || '';
+                return item;
+            }));
         }
 
         return Promise.resolve([]);

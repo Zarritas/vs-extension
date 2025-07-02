@@ -75,14 +75,17 @@ export class ModelsCache {
             this.cache.clear();
             this.componentsCache.clear();
             this.fileModificationTimes.clear();
+            
             const projectManager = ProjectManager.getInstance();
             const modelParser = ModelParser.getInstance();
             const allPaths = projectManager.getAllModelsPaths();
+            
             this.log(`Total de rutas a analizar: ${allPaths.length}`);
             this.log('Rutas encontradas:');
             allPaths.forEach((path, index) => {
                 this.log(`  ${index + 1}. ${path} ${fs.existsSync(path) ? '✅' : '❌'}`);
             });
+
             // Parsear modelos y componentes en cada ruta
             for (const modelPath of allPaths) {
                 this.log(`\n--- Analizando ruta: ${modelPath} ---`);
@@ -93,6 +96,7 @@ export class ModelsCache {
                 try {
                     const pathModels = await modelParser.parseModelsInPath(modelPath);
                     this.log(`📊 Modelos encontrados en esta ruta: ${pathModels.size}`);
+                    
                     // Merge con el caché existente
                     for (const [modelName, models] of pathModels) {
                         // Si es un componente, guardar en componentsCache
@@ -108,12 +112,14 @@ export class ModelsCache {
                             this.cache.get(modelName)!.push(...models);
                         }
                     }
+                    
                     // Actualizar tiempos de modificación
                     await this.updateFileModificationTimes(modelPath);
                 } catch (error) {
                     this.log(`❌ Error analizando modelos en ${modelPath}: ${error}`);
                 }
             }
+            
             this.log(`\n=== CACHE REFRESH COMPLETADO ===`);
             this.log(`📈 Total de modelos cargados: ${this.getTotalModelsCount()}`);
             this.log(`📊 Tipos únicos de modelos: ${this.cache.size}`);
@@ -324,22 +330,24 @@ export class ModelsCache {
      * Obtiene todos los modelos de un nombre específico
      */
     public getModels(modelName: string): GextiaModel[] {
-        // Buscar primero en Gextia Core
-        const projectManager = require('../config/projectManager').ProjectManager.getInstance();
-        const corePath = projectManager.getGextiaCorePath && projectManager.getGextiaCorePath();
-        if (corePath) {
-            for (const [name, models] of this.cache.entries()) {
-                if (name === modelName) {
-                    // Filtrar modelos cuyo filePath comience con el corePath
-                    const coreModels = models.filter(m => m.filePath && m.filePath.startsWith(corePath));
-                    if (coreModels.length > 0) {
-                        return coreModels;
+        const projectManager = ProjectManager.getInstance();
+        if (typeof (projectManager as any).getGextiaCorePath === 'function') {
+            const corePath = (projectManager as any).getGextiaCorePath();
+            if (corePath) {
+                for (const [name, models] of this.cache.entries()) {
+                    if (name === modelName) {
+                        const coreModels = models.filter(m => m.filePath && m.filePath.startsWith(corePath));
+                        if (coreModels.length > 0) {
+                            this.log(`[DEBUG] getModels(${modelName}): ${coreModels.length} modelos en corePath`);
+                            return coreModels;
+                        }
                     }
                 }
             }
         }
-        // Si no se encontró en core, buscar en el resto
-        return this.cache.get(modelName) || [];
+        const result = this.cache.get(modelName) || [];
+        this.log(`[DEBUG] getModels(${modelName}): ${result.length} modelos en cache`);
+        return result;
     }
 
     /**
@@ -353,7 +361,9 @@ export class ModelsCache {
      * Obtiene todos los nombres de modelos disponibles
      */
     public getAllModelNames(): string[] {
-        return Array.from(this.cache.keys()).sort();
+        const names = Array.from(this.cache.keys()).sort();
+        this.log(`[DEBUG] getAllModelNames: ${names.length} modelos encontrados: ${names.join(', ')}`);
+        return names;
     }
 
     /**
@@ -378,25 +388,46 @@ export class ModelsCache {
     }
 
     /**
-     * Obtiene todos los métodos disponibles para un modelo (incluye herencia)
+     * Obtiene todos los modelos que afectan a un modelo (por _name y toda la cadena de _inherit)
      */
-    public getAllMethodsForModel(modelName: string): Map<string, GextiaMethod[]> {
-        const allMethods = new Map<string, GextiaMethod[]>();
+    private getAllRelatedModels(modelName: string, visited: Set<string> = new Set()): GextiaModel[] {
+        if (visited.has(modelName)) return [];
+        visited.add(modelName);
         
-        // Obtener métodos del modelo base
-        const baseModels = this.getModels(modelName);
-        for (const model of baseModels) {
-            for (const method of model.methods) {
-                if (!allMethods.has(method.name)) {
-                    allMethods.set(method.name, []);
+        const directModels = this.getModels(modelName);
+        let result = [...directModels];
+        
+        // Buscar modelos que heredan de este modelo
+        for (const model of directModels) {
+            for (const m of this.cache.values()) {
+                for (const candidate of m) {
+                    if (candidate.isInherit && candidate.inheritFrom === modelName) {
+                        result = result.concat(this.getAllRelatedModels(candidate.name, visited));
+                    }
                 }
-                allMethods.get(method.name)!.push(method);
             }
         }
         
-        // Obtener métodos de modelos que heredan
-        const inheritingModels = this.getInheritingModels(modelName);
-        for (const model of inheritingModels) {
+        // Buscar herencias inversas (modelos que solo tienen _inherit y afectan a este modelo)
+        for (const m of this.cache.values()) {
+            for (const candidate of m) {
+                if (candidate.isInherit && candidate.inheritFrom === modelName && !visited.has(candidate.name)) {
+                    result = result.concat(this.getAllRelatedModels(candidate.name, visited));
+                }
+            }
+        }
+        
+        return result;
+    }
+
+    /**
+     * Obtiene todos los métodos fusionados de un modelo (incluyendo toda la cadena de herencia)
+     */
+    public getAllMethodsForModel(modelName: string): Map<string, GextiaMethod[]> {
+        const allMethods = new Map<string, GextiaMethod[]>();
+        const relatedModels = this.getAllRelatedModels(modelName);
+        
+        for (const model of relatedModels) {
             for (const method of model.methods) {
                 if (!allMethods.has(method.name)) {
                     allMethods.set(method.name, []);
@@ -409,25 +440,13 @@ export class ModelsCache {
     }
 
     /**
-     * Obtiene todos los campos disponibles para un modelo (incluye herencia)
+     * Obtiene todos los campos fusionados de un modelo (incluyendo toda la cadena de herencia)
      */
     public getAllFieldsForModel(modelName: string): Map<string, GextiaField[]> {
         const allFields = new Map<string, GextiaField[]>();
+        const relatedModels = this.getAllRelatedModels(modelName);
         
-        // Obtener campos del modelo base
-        const baseModels = this.getModels(modelName);
-        for (const model of baseModels) {
-            for (const field of model.fields) {
-                if (!allFields.has(field.name)) {
-                    allFields.set(field.name, []);
-                }
-                allFields.get(field.name)!.push(field);
-            }
-        }
-        
-        // Obtener campos de modelos que heredan
-        const inheritingModels = this.getInheritingModels(modelName);
-        for (const model of inheritingModels) {
+        for (const model of relatedModels) {
             for (const field of model.fields) {
                 if (!allFields.has(field.name)) {
                     allFields.set(field.name, []);

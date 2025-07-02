@@ -124,6 +124,16 @@
         "command": "gextia-dev-helper.debugRefreshCache",
         "title": "Debug Refresh Models Cache",
         "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.deleteRuta",
+        "title": "Eliminar ruta de addons",
+        "category": "Gextia"
+      },
+      {
+        "command": "gextia-dev-helper.editRuta",
+        "title": "Modificar ruta de addons",
+        "category": "Gextia"
       }
     ],
     "configuration": {
@@ -185,16 +195,10 @@
           "group": "gextia"
         }
       ],
-      "commandPalette": [
-        {
-          "command": "gextia-dev-helper.openGextiaManager",
-          "when": "true",
-          "group": "navigation"
-        }
-      ],
+      "commandPalette": [],
       "view/title": [
         {
-          "command": "gextia-dev-helper.openGextiaManager",
+          "command": "gextia-dev-helper.refreshModels",
           "when": "view == gextiaManagerView",
           "group": "navigation@1"
         }

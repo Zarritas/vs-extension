@@ -1,6 +1,10 @@
 # Gextia Development Helper
 
-Una extensión de VS Code que revoluciona la experiencia de desarrollo con Gextia, proporcionando autocompletado inteligente, gestión avanzada de proyectos y análisis completo de herencia de modelos con soporte para repositorios remotos.
+> **Work In Progress**
+> 
+> ⚠️ El soporte para rutas de repositorios remotos está actualmente **NO DISPONIBLE** o en fase experimental. La funcionalidad de sincronización y gestión remota puede no funcionar correctamente. Se recomienda usar únicamente rutas locales de addons hasta nuevo aviso.
+
+Una extensión de VS Code que revoluciona la experiencia de desarrollo con Gextia, proporcionando autocompletado inteligente, gestión avanzada de proyectos y análisis completo de herencia de modelos.
 
 ## ✨ Características Principales
 
@@ -8,16 +12,16 @@ Una extensión de VS Code que revoluciona la experiencia de desarrollo con Gexti
 - **Perfiles configurables**: Crea múltiples perfiles de proyecto para diferentes instalaciones de Gextia
 - **Detección automática**: Encuentra automáticamente carpetas de addons en tu workspace
 - **Múltiples fuentes**: Soporte para Gextia Core, Enterprise, Community y addons personalizados
-- **Repositorios remotos**: Integración directa con GitHub, GitLab y Bitbucket
+- **Repositorios remotos**: *(No disponible actualmente)*
 - **Cambio rápido**: Alterna entre proyectos con un solo comando
 
-### 🌐 Repositorios Remotos
-- **GitHub/GitLab/Bitbucket**: Agrega repositorios directamente por URL
-- **Ramas específicas**: Trabaja con ramas específicas (16.0, main, develop, etc.)
-- **Subcarpetas**: Especifica subcarpetas dentro del repositorio (addons/, modules/)
-- **Repositorios privados**: Soporte completo con tokens de autenticación
-- **Sincronización automática**: Mantiene el código actualizado automáticamente
-- **Cache inteligente**: Sistema de cache local para máximo rendimiento
+### 🌐 Repositorios Remotos *(No disponible)*
+- **GitHub/GitLab/Bitbucket**: *(No disponible)*
+- **Ramas específicas**: *(No disponible)*
+- **Subcarpetas**: *(No disponible)*
+- **Repositorios privados**: *(No disponible)*
+- **Sincronización automática**: *(No disponible)*
+- **Cache inteligente**: *(No disponible)*
 
 ### 🧠 Autocompletado Inteligente
 - **Herencia completa**: Detecta automáticamente modelos que heredan usando `_inherit`
@@ -48,7 +52,7 @@ Una extensión de VS Code que revoluciona la experiencia de desarrollo con Gexti
 3. Sigue el asistente de configuración:
    - Nombra tu perfil (ej: "Proyecto Cliente X")
    - Selecciona la versión de Gextia
-   - Configura las fuentes de tus addons
+   - Configura las fuentes de tus addons (solo rutas locales)
 
 ### Fuentes de addons soportadas
 
@@ -59,11 +63,6 @@ Una extensión de VS Code que revoluciona la experiencia de desarrollo con Gexti
 ├── /home/user/custom_addons/
 │   ├── mi_modulo/
 │   └── otro_modulo/
-
-🌐 Repositorios remotos
-├── https://github.com/OCA/server-tools (rama: 16.0)
-├── https://github.com/OCA/web (rama: 16.0, subcarpeta: addons/)
-└── https://gitlab.com/usuario/proyecto-privado (con token)
 
 🔧 Gextia Core (opcional)
 ├── /opt/gextia/16.0/
@@ -76,37 +75,9 @@ Una extensión de VS Code que revoluciona la experiencia de desarrollo con Gexti
 
 ### Configuración de repositorios remotos
 
-#### URLs soportadas:
-```bash
-✅ https://github.com/OCA/server-tools
-✅ https://github.com/OCA/server-tools/tree/16.0
-✅ https://gitlab.com/usuario/proyecto
-✅ https://bitbucket.org/usuario/proyecto
-✅ git@github.com:usuario/proyecto.git
-```
+> ⚠️ **No disponible actualmente**. La funcionalidad de repositorios remotos está en desarrollo y puede no funcionar correctamente.
 
-#### Ejemplos de configuración:
-
-**Repositorio público con rama específica:**
-```
-URL: https://github.com/OCA/server-tools
-Rama: 16.0
-Subcarpeta: (vacío - usa todo el repositorio)
-```
-
-**Repositorio con subcarpeta:**
-```
-URL: https://github.com/gextia/gextia
-Rama: 16.0
-Subcarpeta: addons/
-```
-
-**Repositorio privado:**
-```
-URL: https://github.com/mi-empresa/addons-privados
-Token: ghp_xxxxxxxxxxxxxxxxxxxx
-Rama: main
-```
+---
 
 ## 📋 Comandos Disponibles
 
@@ -116,8 +87,7 @@ Rama: main
 | `Gextia: Create Project Profile` | Crear un nuevo perfil de proyecto |
 | `Gextia: Switch Project Profile` | Cambiar entre perfiles existentes |
 | `Gextia: Add Path to Current Project` | Agregar ruta de addons al proyecto actual |
-| `Gextia: Add Remote Repository to Current Project` | Agregar repositorio remoto al proyecto actual |
-| `Gextia: Manage Project Paths and Repositories` | Gestionar rutas y repositorios del proyecto |
+| `Gextia: Manage Project Paths and Repositories` | Gestionar rutas del proyecto |
 
 ### Cache y Análisis
 | Comando | Descripción |
@@ -129,14 +99,14 @@ Rama: main
 | `Gextia: Show Models Cache Log` | Ver log del caché de modelos |
 | `Gextia: Debug Refresh Models Cache` | Debug del refresco del caché |
 
-### Repositorios Remotos
+### Repositorios Remotos *(No disponible)*
 | Comando | Descripción |
 |---------|-------------|
-| `Gextia: Sync Remote Repositories` | Sincronizar repositorios remotos |
-| `Gextia: Show Remote Repositories Info` | Ver estado de repositorios remotos |
-| `Gextia: Test Remote Repository Connection` | Probar conexión a repositorio remoto |
-| `Gextia: Show Remote Repositories Sync Log` | Ver log de sincronización |
-| `Gextia: Clear Remote Repositories Sync Log` | Limpiar log de sincronización |
+| `Gextia: Sync Remote Repositories` | *(No disponible)* |
+| `Gextia: Show Remote Repositories Info` | *(No disponible)* |
+| `Gextia: Test Remote Repository Connection` | *(No disponible)* |
+| `Gextia: Show Remote Repositories Sync Log` | *(No disponible)* |
+| `Gextia: Clear Remote Repositories Sync Log` | *(No disponible)* |
 
 ## 🎯 Casos de Uso Avanzados
 
@@ -145,8 +115,7 @@ Rama: main
 ```python
 # Perfil configurado con:
 # - Addons locales: /home/dev/mi_proyecto/
-# - OCA Server Tools: https://github.com/OCA/server-tools (16.0)
-# - OCA Web: https://github.com/OCA/web (16.0)
+# - OCA Server Tools: (solo si es ruta local)
 
 class ResPartner(models.Model):
     _inherit = 'res.partner'
@@ -157,21 +126,19 @@ class ResPartner(models.Model):
         self.base_location_geonames_import  # ← Método de OCA
 ```
 
-### 2. Proyecto Enterprise con repositorios privados
+### 2. Proyecto Enterprise con addons locales
 
 ```python
 # Perfil configurado con:
 # - Gextia Core: /opt/gextia/16.0/
 # - Gextia Enterprise: /opt/gextia/enterprise/
-# - Repositorio privado: https://github.com/mi-empresa/addons
 
 class SaleOrder(models.Model):
     _inherit = 'sale.order'
     
     def process_order(self):
-        # Campos de Enterprise + repositorio privado disponibles
+        # Campos de Enterprise disponibles
         self.l10n_mx_edi_cfdi_uuid  # ← Campo de Enterprise
-        self.custom_approval_workflow  # ← Campo de repo privado
 ```
 
 ### 3. Desarrollo multi-cliente
@@ -179,12 +146,10 @@ class SaleOrder(models.Model):
 ```bash
 # Perfil "Cliente A"
 ├── Addons locales: /projects/cliente-a/addons/
-├── Repositorio: https://github.com/cliente-a/customizations
 └── Versión: 16.0
 
 # Perfil "Cliente B"  
 ├── Addons locales: /projects/cliente-b/addons/
-├── Repositorio: https://gitlab.cliente-b.com/gextia-addons
 └── Versión: 15.0
 
 # Cambio rápido: Gextia: Switch Project Profile
@@ -212,28 +177,10 @@ La extensión excluye automáticamente:
 - `**/__pycache__/**` - Cache de Python
 - `**/*.pyc` - Archivos compilados
 
-### Tokens de autenticación
-
-**GitHub Personal Access Token:**
-1. Ve a GitHub > Settings > Developer settings > Personal access tokens
-2. Generate new token (classic)
-3. Scopes necesarios: `repo` (para repositorios privados)
-
-**GitLab Personal Access Token:**
-1. Ve a GitLab > User Settings > Access Tokens
-2. Add a personal access token
-3. Scopes: `read_repository`
-
-**Bitbucket App Password:**
-1. Ve a Bitbucket > Personal settings > App passwords
-2. Create app password
-3. Permissions: `Repositories: Read`
-
 ## 🔄 Sincronización y Cache
 
 ### Sincronización automática
-- Los repositorios se sincronizan automáticamente cada 24 horas
-- Puedes forzar sincronización: `Gextia: Sync Remote Repositories`
+- *(No disponible para repositorios remotos)*
 - El cache local se actualiza automáticamente al guardar archivos
 
 ### Gestión de cache
@@ -245,19 +192,13 @@ La extensión excluye automáticamente:
 
 ### El autocompletado no funciona
 1. Verifica que tengas un perfil activo: `Gextia: Show Cache Statistics`
-2. Sincroniza repositorios: `Gextia: Sync Remote Repositories`
-3. Refresca el caché: `Gextia: Refresh Models Cache`
+2. Refresca el caché: `Gextia: Refresh Models Cache`
 
 ### Error de conexión a repositorio remoto
-1. Verifica la URL del repositorio
-2. Comprueba tu conexión a internet
-3. Para repositorios privados, verifica el token de autenticación
-4. Revisa los logs: View > Output > "Gextia Remote Repositories"
+- *(No disponible actualmente)*
 
 ### Error HTTP 403 (Forbidden)
-- **Repositorios OCA**: Configura un token de GitHub para evitar rate limits
-- **Repositorios privados**: Verifica que el token tenga permisos `repo`
-- **Repositorios públicos**: Algunos pueden requerir autenticación
+- *(No disponible actualmente)*
 
 ### Rendimiento lento
 1. Verifica la configuración de exclusiones
@@ -266,26 +207,20 @@ La extensión excluye automáticamente:
 4. Limpia el cache: elimina `~/.vscode/gextia-dev-helper/cache/`
 
 ### Repositorio no sincroniza
-1. Verifica permisos del token de autenticación
-2. Comprueba que la rama especificada existe
-3. Revisa la configuración de subcarpeta
-4. Consulta logs detallados en modo debug
+- *(No disponible actualmente)*
 
 ## 🚀 Casos de Uso Reales
 
 ### Startup desarrollando para múltiples clientes
-- **Perfil por cliente** con repositorios específicos
-- **Sincronización automática** mantiene código actualizado
+- **Perfil por cliente** con rutas locales específicas
 - **Cambio rápido** entre proyectos sin reconfigurar
 
 ### Empresa usando OCA + desarrollos propios
-- **Repositorios OCA** públicos sincronizados automáticamente
-- **Repositorio privado** de la empresa con token
+- **Repositorios OCA** locales sincronizados manualmente
 - **Autocompletado completo** de toda la funcionalidad disponible
 
 ### Desarrollador freelance
 - **Múltiples versiones de Gextia** en diferentes perfiles
-- **Repositorios de diferentes fuentes** (GitHub, GitLab, Bitbucket)
 - **Cache inteligente** para trabajar offline
 
 ## 🔍 Características Técnicas
@@ -297,10 +232,7 @@ La extensión excluye automáticamente:
 - **Manifests**: Parsea `__manifest__.py` y `__openerp__.py`
 
 ### Gestión de Repositorios
-- **Descarga ZIP**: Descarga repositorios como archivos ZIP
-- **Extracción automática**: Extrae y organiza archivos localmente
-- **Sincronización incremental**: Solo descarga cambios necesarios
-- **Manejo de errores**: Reintentos automáticos y logging detallado
+- *(No disponible actualmente)*
 
 ### Autocompletado Contextual
 - **Análisis de contexto**: Detecta modelo y método actual
@@ -341,8 +273,8 @@ MIT License - ver [LICENSE](LICENSE) para más detalles.
 
 ## 📊 Estadísticas del Proyecto
 
-- **🎯 Casos de uso**: Desarrollo local, repositorios remotos, múltiples clientes
-- **🌐 Repositorios soportados**: GitHub, GitLab, Bitbucket, Git genérico
+- **🎯 Casos de uso**: Desarrollo local, múltiples clientes
+- **🌐 Repositorios soportados**: *(Solo rutas locales actualmente)*
 - **📦 Versiones Gextia**: 11.0, 12.0, 13.0, 14.0, 15.0, 16.0, 17.0
 - **🔧 Tipos de instalación**: Source, Docker, SaaS, On-premise
 
