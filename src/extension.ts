@@ -744,11 +744,11 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     // Comando para abrir la ventana visual (Webview)
-    // const openGextiaManagerCommand = vscode.commands.registerCommand(
-    //     'gextia-dev-helper.openGextiaManager',
-    //     () => { /* ...WebviewPanel eliminado... */ }
-    // );
-    // context.subscriptions.push(openGextiaManagerCommand);
+    const openGextiaManagerCommand = vscode.commands.registerCommand(
+       'gextia-dev-helper.openGextiaManager',
+        () => { /* ...WebviewPanel eliminado... */ }
+    );
+    context.subscriptions.push(openGextiaManagerCommand);
 
     // Funciones auxiliares para manageProjectPaths
     async function removeAddonsPath(projectManager: ProjectManager, profile: any): Promise<void> {
