@@ -713,19 +713,12 @@ export function activate(context: vscode.ExtensionContext) {
         const item = e.selection[0];
         if (!item) return;
         const modelsCache = ModelsCache.getInstance();
-        if (item.contextValue === 'modelo') {
-            const modelos = modelsCache.getModels(item.label);
-            if (modelos.length > 0) {
-                const model = modelos[0];
-                const msg = `Modelo: ${model.name}\nArchivo: ${model.filePath}\nClase: ${model.className}\nCampos: ${model.fields.length}\nMétodos: ${model.methods.length}`;
-                const open = await vscode.window.showInformationMessage(msg, 'Abrir archivo');
-                if (open === 'Abrir archivo') {
-                    const doc = await vscode.workspace.openTextDocument(model.filePath);
-                    vscode.window.showTextDocument(doc, { selection: new vscode.Range(model.lineNumber-1,0,model.lineNumber-1,0) });
-                }
-            } else {
-                vscode.window.showWarningMessage('No se encontró información del modelo.');
-            }
+        if (item.contextValue === 'campo') {
+            vscode.window.showInformationMessage(`Campo: ${item.label}${item.description ? ' (' + item.description + ')' : ''}\n${item.tooltip || ''}`);
+        } else if (item.contextValue === 'metodo') {
+            vscode.window.showInformationMessage(`Método: ${item.label}\n${item.tooltip || ''}`);
+        } else if (item.contextValue === 'modelo') {
+            // No mostrar info, solo expandir
         } else if (item.contextValue === 'componente') {
             const componentes = modelsCache.getComponent(item.label);
             if (componentes.length > 0) {

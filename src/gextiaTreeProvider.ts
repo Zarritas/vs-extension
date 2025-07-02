@@ -37,7 +37,7 @@ export class GextiaTreeProvider implements vscode.TreeDataProvider<GextiaTreeIte
                 }
                 case 'Modelos': {
                     const modelos = modelsCache.getAllModelNames();
-                    return Promise.resolve(modelos.map(m => new GextiaTreeItem(m, 'modelo', vscode.TreeItemCollapsibleState.None)));
+                    return Promise.resolve(modelos.map(m => new GextiaTreeItem(m, 'modelo', vscode.TreeItemCollapsibleState.Collapsed)));
                 }
                 case 'Componentes': {
                     const componentes = modelsCache.getAllComponentNames();
@@ -67,6 +67,41 @@ export class GextiaTreeProvider implements vscode.TreeDataProvider<GextiaTreeIte
             }
         }
 
+        // Subdividir modelos en campos y métodos
+        if (element.contextValue === 'modelo') {
+            return Promise.resolve([
+                new GextiaTreeItem('Campos', 'camposGroup', vscode.TreeItemCollapsibleState.Collapsed, undefined, element.label),
+                new GextiaTreeItem('Métodos', 'metodosGroup', vscode.TreeItemCollapsibleState.Collapsed, undefined, element.label)
+            ]);
+        }
+        // Mostrar campos del modelo
+        if (element.contextValue === 'camposGroup') {
+            const modelos = modelsCache.getModels(element.parentModelName!);
+            if (modelos.length > 0) {
+                const campos = modelos[0].fields || [];
+                return Promise.resolve(campos.map((f: any) => {
+                    const item = new GextiaTreeItem(f.name, 'campo', vscode.TreeItemCollapsibleState.None);
+                    item.description = f.type;
+                    item.tooltip = f.docString || '';
+                    return item;
+                }));
+            }
+            return Promise.resolve([]);
+        }
+        // Mostrar métodos del modelo
+        if (element.contextValue === 'metodosGroup') {
+            const modelos = modelsCache.getModels(element.parentModelName!);
+            if (modelos.length > 0) {
+                const metodos = modelos[0].methods || [];
+                return Promise.resolve(metodos.map((m: any) => {
+                    const item = new GextiaTreeItem(m.name, 'metodo', vscode.TreeItemCollapsibleState.None);
+                    item.tooltip = m.docString || '';
+                    return item;
+                }));
+            }
+            return Promise.resolve([]);
+        }
+
         return Promise.resolve([]);
     }
 }
@@ -76,15 +111,21 @@ export class GextiaTreeItem extends vscode.TreeItem {
         public readonly label: string,
         public readonly contextValue: string,
         public readonly collapsibleState: vscode.TreeItemCollapsibleState,
-        public readonly command?: vscode.Command
+        public readonly command?: vscode.Command,
+        public readonly parentModelName?: string // Para saber a qué modelo pertenecen campos/métodos
     ) {
         super(label, collapsibleState);
         this.contextValue = contextValue;
         if (command) this.command = command;
+        if (parentModelName) this.parentModelName = parentModelName;
         // Iconos personalizados por tipo
         if (contextValue === 'ruta') this.iconPath = new vscode.ThemeIcon('folder');
         if (contextValue === 'modelo') this.iconPath = new vscode.ThemeIcon('symbol-class');
         if (contextValue === 'componente') this.iconPath = new vscode.ThemeIcon('symbol-method');
         if (contextValue === 'accion') this.iconPath = new vscode.ThemeIcon('gear');
+        if (contextValue === 'campo') this.iconPath = new vscode.ThemeIcon('symbol-field');
+        if (contextValue === 'metodo') this.iconPath = new vscode.ThemeIcon('symbol-function');
+        if (contextValue === 'camposGroup') this.iconPath = new vscode.ThemeIcon('symbol-field');
+        if (contextValue === 'metodosGroup') this.iconPath = new vscode.ThemeIcon('symbol-function');
     }
 }
