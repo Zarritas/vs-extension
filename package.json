@@ -198,6 +198,18 @@
           "when": "view == gextiaManagerView",
           "group": "navigation@1"
         }
+      ],
+      "view/item/context": [
+        {
+          "command": "gextia-dev-helper.deleteRuta",
+          "when": "view == gextiaManagerView && viewItem == ruta",
+          "group": "inline"
+        },
+        {
+          "command": "gextia-dev-helper.editRuta",
+          "when": "view == gextiaManagerView && viewItem == ruta",
+          "group": "inline"
+        }
       ]
     },
     "languages": [

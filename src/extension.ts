@@ -750,6 +750,37 @@ export function activate(context: vscode.ExtensionContext) {
     );
     context.subscriptions.push(openGextiaManagerCommand);
 
+    // Comando para borrar una ruta desde el TreeView
+    context.subscriptions.push(vscode.commands.registerCommand('gextia-dev-helper.deleteRuta', async (item) => {
+        if (!item || !item.label) return;
+        const projectManager = ProjectManager.getInstance();
+        const profile = projectManager.getCurrentProfile();
+        if (!profile) return;
+        const confirm = await vscode.window.showWarningMessage(`¿Borrar la ruta "${item.label}" del perfil activo?`, 'Sí', 'No');
+        if (confirm === 'Sí') {
+            await projectManager.removeAddonsPath(item.label);
+            vscode.commands.executeCommand('gextia-dev-helper.refreshTree');
+        }
+    }));
+
+    // Comando para modificar una ruta desde el TreeView
+    context.subscriptions.push(vscode.commands.registerCommand('gextia-dev-helper.editRuta', async (item) => {
+        if (!item || !item.label) return;
+        const projectManager = ProjectManager.getInstance();
+        const profile = projectManager.getCurrentProfile();
+        if (!profile) return;
+        const nuevaRuta = await vscode.window.showInputBox({
+            prompt: 'Nueva ruta para reemplazar',
+            value: item.label
+        });
+        if (nuevaRuta && nuevaRuta !== item.label) {
+            // Eliminar la anterior y agregar la nueva
+            await projectManager.removeAddonsPath(item.label);
+            await projectManager.addAddonsPath(nuevaRuta);
+            vscode.commands.executeCommand('gextia-dev-helper.refreshTree');
+        }
+    }));
+
     // Funciones auxiliares para manageProjectPaths
     async function removeAddonsPath(projectManager: ProjectManager, profile: any): Promise<void> {
         if (profile.paths.addonsPath.length === 0) {

@@ -498,7 +498,7 @@ export class ProjectManager {
     public getGextiaCorePath(): string | null {
         const currentProfile = this.getCurrentProfile();
         if (!currentProfile?.paths.gextiaPath) {return null;}
-        return path.join(currentProfile.paths.gextiaPath, 'gextia');
+        return path.join(currentProfile.paths.gextiaPath, 'odoo');
     }
 
     /**
